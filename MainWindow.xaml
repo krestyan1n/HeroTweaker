@@ -15,7 +15,6 @@
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
 
-        <!-- Основная палитра Slate Cyan / Deep Navy -->
         <SolidColorBrush x:Key="WindowBgBrush" Color="#0B0F19" />
         <SolidColorBrush x:Key="SidebarBgBrush" Color="#070A10" />
         <SolidColorBrush x:Key="CardBgBrush" Color="#111827" />
@@ -38,7 +37,129 @@
             <GradientStop Color="#250284C7" Offset="1.0" />
         </LinearGradientBrush>
 
-        <!-- КАСТОМНЫЙ SCROLLBAR -->
+        <!-- КАСТОМНЫЙ COMBOBOX ITEM С ТЕМНОЙ ПОДСВЕТКОЙ -->
+        <Style TargetType="{x:Type ComboBoxItem}">
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ComboBoxItem}">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="6" Margin="4,2" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource CardHoverBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource CyanAccentBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#1E293B"/>
+                                <Setter Property="Foreground" Value="{DynamicResource CyanAccentBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- КАНОНИЧЕСКИЙ COMBOBOX С РАБОТАЮЩИМ TOGGLEBUTTON И PART_POPUP -->
+        <Style TargetType="{x:Type ComboBox}">
+            <Setter Property="Background" Value="#070A14"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ComboBox}">
+                        <Grid x:Name="templateRoot" SnapsToDevicePixels="True">
+                            <!-- Фоновая кнопка-переключатель на всю ширину комбобокса -->
+                            <ToggleButton x:Name="toggleButton"
+                                          Background="{TemplateBinding Background}"
+                                          BorderBrush="{TemplateBinding BorderBrush}"
+                                          BorderThickness="{TemplateBinding BorderThickness}"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                          ClickMode="Press"
+                                          Focusable="False">
+                                <ToggleButton.Style>
+                                    <Style TargetType="{x:Type ToggleButton}">
+                                        <Setter Property="OverridesDefaultStyle" Value="True"/>
+                                        <Setter Property="IsTabStop" Value="False"/>
+                                        <Setter Property="Focusable" Value="False"/>
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="{x:Type ToggleButton}">
+                                                    <Border x:Name="btnBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8">
+                                                        <Grid>
+                                                            <Border Width="32" HorizontalAlignment="Right" Background="Transparent">
+                                                                <Path x:Name="arrow" Data="M 0 0 L 4 4 L 8 0 Z" Fill="#94A3B8" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                            </Border>
+                                                        </Grid>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter TargetName="btnBorder" Property="BorderBrush" Value="{DynamicResource CyanAccentBrush}"/>
+                                                        </Trigger>
+                                                        <Trigger Property="IsChecked" Value="True">
+                                                            <Setter TargetName="btnBorder" Property="BorderBrush" Value="{DynamicResource CyanAccentBrush}"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </ToggleButton.Style>
+                            </ToggleButton>
+
+                            <!-- Отображение текущего выбранного элемента -->
+                            <ContentPresenter x:Name="contentPresenter"
+                                              Content="{TemplateBinding SelectionBoxItem}"
+                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                              ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              Margin="{TemplateBinding Padding}"
+                                              IsHitTestVisible="False"/>
+
+                            <!-- Всплывающий список элементов с темным фоном -->
+                            <Popup x:Name="PART_Popup"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   Placement="Bottom"
+                                   PopupAnimation="Slide">
+                                <Border x:Name="dropDownBorder"
+                                        Background="#111827"
+                                        BorderBrush="{DynamicResource GlassBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="8"
+                                        MinWidth="{Binding ActualWidth, ElementName=templateRoot}"
+                                        MaxHeight="260"
+                                        Margin="0,4,0,0">
+                                    <Border.Effect>
+                                        <DropShadowEffect Color="#000000" BlurRadius="20" ShadowDepth="4" Opacity="0.85"/>
+                                    </Border.Effect>
+                                    <ScrollViewer SnapsToDevicePixels="True">
+                                        <ItemsPresenter SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="ScrollBarThumbStyle" TargetType="{x:Type Thumb}">
             <Setter Property="OverridesDefaultStyle" Value="True"/>
             <Setter Property="IsTabStop" Value="False"/>
@@ -97,7 +218,6 @@
             </Style.Triggers>
         </Style>
 
-        <!-- Пункты контекстного меню -->
         <Style x:Key="DarkMenuItemStyle" TargetType="{x:Type MenuItem}">
             <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
             <Setter Property="FontSize" Value="12"/>
@@ -286,7 +406,7 @@
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
-        <!-- ЛЕВЫЙ САЙДБАР С АКТИВНОЙ ПОДСВЕТКОЙ И ИКОНКОЙ -->
+        <!-- ЛЕВЫЙ САЙДБАР -->
         <Border Grid.Column="0" Background="{DynamicResource SidebarBgBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0" Padding="14,16">
             <Grid>
                 <Grid.RowDefinitions>
@@ -298,14 +418,11 @@
 
                 <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="4,4,0,22">
                     <Border Width="52" Height="52" CornerRadius="12" Background="#0C1526" BorderBrush="{DynamicResource CyanAccentBrush}" BorderThickness="1.5" Margin="0,0,12,0">
-                        <Image Source="pack://application:,,,/Hero.ico" 
-                               Width="40" Height="40" 
-                               RenderOptions.BitmapScalingMode="HighQuality" 
-                               VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        <Image Source="pack://application:,,,/Hero.ico" Width="40" Height="40" RenderOptions.BitmapScalingMode="HighQuality" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                     </Border>
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="HeroTweaker" FontSize="17" FontWeight="Black" Foreground="{DynamicResource TextPrimaryBrush}" />
-                        <TextBlock Text="v0.8.5 · PRO" FontSize="10" Foreground="{DynamicResource CyanAccentBrush}" FontWeight="Bold" Margin="0,2,0,0"/>
+                        <TextBlock Text="v0.8.2 · PRO" FontSize="10" Foreground="{DynamicResource CyanAccentBrush}" FontWeight="Bold" Margin="0,2,0,0"/>
                     </StackPanel>
                 </StackPanel>
 
@@ -394,6 +511,20 @@
                                 <Style TargetType="Button" BasedOn="{StaticResource SidebarNavButtonStyle}">
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding SelectedCategory}" Value="Автозагрузка">
+                                            <Setter Property="Background" Value="{DynamicResource CardHoverBrush}"/>
+                                            <Setter Property="BorderBrush" Value="{DynamicResource CyanAccentBrush}"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource CyanAccentBrush}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+
+                        <Button Content="⚡  Сеть &amp; Пинг" Command="{Binding SelectCategoryCommand}" CommandParameter="Сеть &amp; Пинг">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource SidebarNavButtonStyle}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SelectedCategory}" Value="Сеть &amp; Пинг">
                                             <Setter Property="Background" Value="{DynamicResource CardHoverBrush}"/>
                                             <Setter Property="BorderBrush" Value="{DynamicResource CyanAccentBrush}"/>
                                             <Setter Property="Foreground" Value="{DynamicResource CyanAccentBrush}"/>
@@ -536,12 +667,10 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-
                 <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
                     <TextBlock Text="{Binding SelectedCategory}" FontSize="24" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/>
                     <TextBlock Text="{Binding CategorySubtitle}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/>
                 </StackPanel>
-
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button Content="📋 История" Command="{Binding ToggleHistoryCommand}" Style="{StaticResource DarkCardButtonStyle}" Margin="0,0,6,0" Padding="12,6"/>
                     <Button Content="🛡️ Бэкап ОС" Command="{Binding CreateRestorePointCommand}" Style="{StaticResource DarkCardButtonStyle}" Margin="0,0,6,0" Padding="12,6"/>
@@ -565,7 +694,7 @@
                 </Grid>
             </Border>
 
-            <!-- ===================== ВКЛАДКИ ===================== -->
+            <!-- ВКЛАДКИ -->
             <Grid Grid.Row="2">
                 <!-- 1. ИНФОРМАЦИЯ (ДАШБОРД) -->
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding IsDashboardVisible, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
@@ -575,7 +704,6 @@
                                 <ColumnDefinition Width="1.4*" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-
                             <Border Grid.Column="0" Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="20" Margin="0,0,12,0">
                                 <Grid>
                                     <Grid.RowDefinitions>
@@ -589,7 +717,6 @@
                                             <ColumnDefinition Width="110"/>
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
-
                                         <Grid Grid.Column="0" Width="96" Height="96" HorizontalAlignment="Left">
                                             <Ellipse Stroke="#182236" StrokeThickness="7"/>
                                             <Ellipse Stroke="{DynamicResource CyanAccentBrush}" StrokeThickness="7" StrokeDashArray="20 8" RenderTransformOrigin="0.5, 0.5">
@@ -611,13 +738,11 @@
                                                 <TextBlock Text="% OPTIMIZED" FontSize="8.5" FontWeight="Bold" Foreground="{DynamicResource CyanAccentBrush}" HorizontalAlignment="Center"/>
                                             </StackPanel>
                                         </Grid>
-
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="14,0,0,0">
                                             <TextBlock Text="{Binding SystemHealthStatusText}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,0,0,12"/>
                                             <Button Content="✨ Применить рекомендуемые твики" Command="{Binding ApplyAllRecommendationsCommand}" Style="{StaticResource CyanActionButtonStyle}" HorizontalAlignment="Left" Padding="16,8"/>
                                         </StackPanel>
                                     </Grid>
-
                                     <UniformGrid Grid.Row="2" Columns="3" Margin="0,18,0,0">
                                         <Border Background="#090E1A" CornerRadius="8" Padding="12,8" Margin="0,0,6,0">
                                             <StackPanel>
@@ -656,7 +781,6 @@
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0">
                                             <TextBlock Text="{Binding SysInfo.TotalRamFormatted, FallbackValue='32 ГБ', StringFormat='RAM: {0}'}" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                             <TextBlock Text="Память оптимизирована" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
-
                                             <Button Content="⚡ Очистить память" Command="{Binding CleanMemoryCommand}" Background="Transparent" BorderThickness="0" Foreground="{DynamicResource CyanAccentBrush}" FontSize="11" FontWeight="Bold" Cursor="Hand" HorizontalAlignment="Left" Padding="0,3,0,0">
                                                 <Button.Template>
                                                     <ControlTemplate TargetType="Button">
@@ -761,27 +885,23 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <!-- 2. ДИСК (DISKTREE + DEEP CLEANUP С ПОДВКЛАДКАМИ) -->
+                <!-- 2. ДИСК -->
                 <Grid Visibility="{Binding IsDiskVisible, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-
                     <Border Grid.Row="0" Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="6" Margin="0,0,0,14">
                         <UniformGrid Columns="2">
                             <Button Content="📊 Интерактивный анализ (DiskTree)" Command="{Binding SelectDiskSubTabCommand}" CommandParameter="0" Style="{StaticResource DarkCardButtonStyle}" Margin="0,0,4,0"/>
                             <Button Content="🧹 Глубокая очистка диска" Command="{Binding SelectDiskSubTabCommand}" CommandParameter="1" Style="{StaticResource DarkCardButtonStyle}" Margin="4,0,0,0"/>
                         </UniformGrid>
                     </Border>
-
-                    <!-- Подвкладка 0: Анализатор DiskTree -->
                     <Grid Grid.Row="1" Visibility="{Binding IsDiskTreeSubTabVisible, Converter={StaticResource BoolToVis}}">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
-
                         <Border Grid.Row="0" Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="10,6" Margin="0,0,0,12">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -792,7 +912,6 @@
                                 <StackPanel Grid.Column="0" Orientation="Horizontal">
                                     <Button Content="⬅ Назад" Command="{Binding GoUpDiskCommand}" Style="{StaticResource DarkCardButtonStyle}" Padding="10,5" Margin="0,0,6,0"/>
                                     <Button Content="🔄" Command="{Binding RefreshDiskCommand}" Style="{StaticResource DarkCardButtonStyle}" Padding="8,5" Margin="0,0,8,0"/>
-
                                     <Button Content="💾 Диски ▾" Click="DriveSelectButton_Click" Style="{StaticResource CyanActionButtonStyle}" Padding="10,5">
                                         <Button.ContextMenu>
                                             <ContextMenu Style="{StaticResource DarkContextMenuStyle}" ItemsSource="{Binding AvailableDrives}">
@@ -807,7 +926,6 @@
                                         </Button.ContextMenu>
                                     </Button>
                                 </StackPanel>
-
                                 <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="10,0">
                                     <ItemsControl ItemsSource="{Binding Breadcrumbs}">
                                         <ItemsControl.ItemsPanel>
@@ -828,13 +946,11 @@
                                 <Button Grid.Column="2" Content="📁 Обзор..." Command="{Binding ChooseDiskFolderCommand}" Style="{StaticResource DarkCardButtonStyle}" Padding="12,5"/>
                             </Grid>
                         </Border>
-
                         <Grid Grid.Row="1">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="430" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-
                             <Grid Grid.Column="0" Margin="0,0,12,0">
                                 <Border Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="12">
                                     <Grid>
@@ -855,46 +971,13 @@
                                         <controls:DiskDonutChart ItemsSource="{Binding AllSunburstSlices}" TotalSizeText="{Binding CurrentDiskTotalFormatted}" FolderNameText="{Binding CurrentDiskFolderName}" ItemClickCommand="{Binding DrillDownDiskCommand}" HoveredItem="{Binding HoveredDiskItem, Mode=TwoWay}" ItemContextMenu="{StaticResource DiskItemContextMenu}"/>
                                     </Grid>
                                 </Border>
-
                                 <Border Background="#F5060912" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="12" Visibility="{Binding IsDiskScanning, Converter={StaticResource BoolToVis}}">
                                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                        <Grid Width="140" Height="140" Margin="0,0,0,18">
-                                            <Ellipse Width="130" Height="130" Stroke="{DynamicResource CyanAccentBrush}" StrokeThickness="2.5" StrokeDashArray="12 8" RenderTransformOrigin="0.5, 0.5">
-                                                <Ellipse.RenderTransform>
-                                                    <RotateTransform x:Name="RadarOuterRotate" Angle="0"/>
-                                                </Ellipse.RenderTransform>
-                                                <Ellipse.Triggers>
-                                                    <EventTrigger RoutedEvent="Loaded">
-                                                        <BeginStoryboard>
-                                                            <Storyboard RepeatBehavior="Forever">
-                                                                <DoubleAnimation Storyboard.TargetName="RadarOuterRotate" Storyboard.TargetProperty="Angle" From="0" To="360" Duration="0:0:3.5"/>
-                                                            </Storyboard>
-                                                        </BeginStoryboard>
-                                                    </EventTrigger>
-                                                </Ellipse.Triggers>
-                                            </Ellipse>
-                                            <Ellipse Width="95" Height="95" Stroke="#EC4899" StrokeThickness="2" StrokeDashArray="6 10" RenderTransformOrigin="0.5, 0.5">
-                                                <Ellipse.RenderTransform>
-                                                    <RotateTransform x:Name="RadarInnerRotate" Angle="360"/>
-                                                </Ellipse.RenderTransform>
-                                                <Ellipse.Triggers>
-                                                    <EventTrigger RoutedEvent="Loaded">
-                                                        <BeginStoryboard>
-                                                            <Storyboard RepeatBehavior="Forever">
-                                                                <DoubleAnimation Storyboard.TargetName="RadarInnerRotate" Storyboard.TargetProperty="Angle" From="360" To="0" Duration="0:0:4.8"/>
-                                                            </Storyboard>
-                                                        </BeginStoryboard>
-                                                    </EventTrigger>
-                                                </Ellipse.Triggers>
-                                            </Ellipse>
-                                            <TextBlock Text="⚡" FontSize="30" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                        </Grid>
                                         <ProgressBar IsIndeterminate="True" Width="180" Height="5" Background="#141C2E" Foreground="{DynamicResource CyanAccentBrush}" BorderThickness="0" Margin="0,0,0,10"/>
                                         <TextBlock Text="ЧТЕНИЕ СЕКТОРОВ И КЭША DISKTREE..." Foreground="{DynamicResource CyanAccentBrush}" FontSize="11" FontWeight="Bold" HorizontalAlignment="Center"/>
                                     </StackPanel>
                                 </Border>
                             </Grid>
-
                             <Border Grid.Column="1" Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="14">
                                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                                     <ItemsControl ItemsSource="{Binding Level1ListItems}">
@@ -935,14 +1018,11 @@
                             </Border>
                         </Grid>
                     </Grid>
-
-                    <!-- Подвкладка 1: Глубокая очистка диска -->
                     <Grid Grid.Row="1" Visibility="{Binding IsDiskCleanupSubTabVisible, Converter={StaticResource BoolToVis}}">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
-
                         <Border Grid.Row="0" Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10" Margin="0,0,0,14">
                             <Grid>
                                 <Grid.RowDefinitions>
@@ -968,7 +1048,6 @@
                                 <ProgressBar Grid.Row="1" IsIndeterminate="True" Height="3" Background="#141C2E" Foreground="{DynamicResource CyanAccentBrush}" BorderThickness="0" Visibility="{Binding IsScanningCleanable, Converter={StaticResource BoolToVis}}"/>
                             </Grid>
                         </Border>
-
                         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                             <ItemsControl ItemsSource="{Binding CleanupCategories}">
                                 <ItemsControl.ItemTemplate>
@@ -1019,11 +1098,7 @@
                             <ItemsControl ItemsSource="{Binding ConsoleLogs}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <TextBlock FontFamily="Consolas" FontSize="12" Margin="0,2">
-                                            <Run Text="{Binding FormattedTime, Mode=OneWay}" Foreground="#475569"/>
-                                            <Run Text=" "/><Run Text="{Binding Prefix, Mode=OneWay}" Foreground="{Binding ColorHex, Mode=OneWay}" FontWeight="Bold"/>
-                                            <Run Text=" "/><Run Text="{Binding Message, Mode=OneWay}" Foreground="{Binding ColorHex, Mode=OneWay}"/>
-                                        </TextBlock>
+                                        <TextBlock FontFamily="Consolas" FontSize="12" Margin="0,2"><Run Text="{Binding FormattedTime, Mode=OneWay}" Foreground="#475569"/><Run Text=" "/><Run Text="{Binding Prefix, Mode=OneWay}" Foreground="{Binding ColorHex, Mode=OneWay}" FontWeight="Bold"/><Run Text=" "/><Run Text="{Binding Message, Mode=OneWay}" Foreground="{Binding ColorHex, Mode=OneWay}"/></TextBlock>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
@@ -1031,13 +1106,12 @@
                     </Border>
                 </Grid>
 
-                <!-- 4. ПРИЛОЖЕНИЯ & TOOLBOX С ОФИЦИАЛЬНЫМИ ИКОНКАМИ -->
+                <!-- 4. ПРИЛОЖЕНИЯ & TOOLBOX -->
                 <Grid Visibility="{Binding IsAppsVisible, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-
                     <Border Grid.Row="0" Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="6" Margin="0,0,0,14">
                         <UniformGrid Columns="3">
                             <Button Content="📦 Каталог ПО (Toolbox)" Command="{Binding SelectAppsSubTabCommand}" CommandParameter="0" Style="{StaticResource DarkCardButtonStyle}" Margin="0,0,4,0"/>
@@ -1045,8 +1119,6 @@
                             <Button Content="🔄 Восстановление UWP" Command="{Binding SelectAppsSubTabCommand}" CommandParameter="2" Style="{StaticResource DarkCardButtonStyle}" Margin="4,0,0,0"/>
                         </UniformGrid>
                     </Border>
-
-                    <!-- Подвкладка 0: Каталог софта с официальными логотипами -->
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Visibility="{Binding IsCatalogSubTabVisible, Converter={StaticResource BoolToVis}}">
                         <ItemsControl ItemsSource="{Binding CatalogApps}">
                             <ItemsControl.ItemsPanel>
@@ -1063,17 +1135,12 @@
                                                 <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
-
-                                            <!-- Бейдж с официальной иконкой и плавным фоллбэком -->
                                             <Border Grid.Column="0" Width="44" Height="44" CornerRadius="10" Background="{DynamicResource CardHoverBrush}" Margin="0,0,12,0" VerticalAlignment="Center">
                                                 <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
                                                     <TextBlock Text="{Binding IconGlyph}" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.6"/>
-                                                    <Image Source="{Binding IconUrl}" Width="28" Height="28"
-                                                           RenderOptions.BitmapScalingMode="HighQuality"
-                                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    <Image Source="{Binding IconUrl}" Width="28" Height="28" RenderOptions.BitmapScalingMode="HighQuality" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                                 </Grid>
                                             </Border>
-
                                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,10,0">
                                                 <StackPanel Orientation="Horizontal">
                                                     <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/>
@@ -1090,7 +1157,6 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </ScrollViewer>
-
                     <Grid Grid.Row="1" Visibility="{Binding IsInstalledSubTabVisible, Converter={StaticResource BoolToVis}}">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
@@ -1134,7 +1200,6 @@
                             </ScrollViewer>
                         </Border>
                     </Grid>
-
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Visibility="{Binding IsRestoreSubTabVisible, Converter={StaticResource BoolToVis}}">
                         <StackPanel Margin="0,0,10,0">
                             <Border Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="18" Margin="0,0,0,14">
@@ -1150,7 +1215,6 @@
                                     <Button Grid.Column="1" Content="Восстановить Store" Command="{Binding RestoreStoreCommand}" Style="{StaticResource CyanActionButtonStyle}" Padding="14,8"/>
                                 </Grid>
                             </Border>
-
                             <Border Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="18">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -1174,14 +1238,12 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-
                     <Border Grid.Row="0" Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10" Margin="0,0,0,14">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
-
                             <Grid Grid.Row="0" Margin="14,12">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -1193,15 +1255,12 @@
                                 </StackPanel>
                                 <Button Grid.Column="1" Content="{Binding DevScanButtonText}" Command="{Binding ScanDeveloperDoctorCommand}" Style="{StaticResource CyanActionButtonStyle}" Padding="14,6"/>
                             </Grid>
-
                             <ProgressBar Grid.Row="1" IsIndeterminate="True" Height="3" Background="#141C2E" Foreground="{DynamicResource CyanAccentBrush}" BorderThickness="0" Visibility="{Binding IsDevScanning, Converter={StaticResource BoolToVis}}"/>
                         </Grid>
                     </Border>
-
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                         <StackPanel>
                             <TextBlock Text="📦 СРЕДЫ РАЗРАБОТКИ И SDK" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource CyanAccentBrush}" Margin="2,0,0,10"/>
-
                             <ItemsControl ItemsSource="{Binding DevComponents}" Margin="0,0,0,18">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>
@@ -1233,12 +1292,10 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
-
                             <Border Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="16" Margin="0,0,0,18">
                                 <StackPanel>
                                     <TextBlock Text="🔍 КТО ВЛАДЕЕТ КОМАНДОЙ? (CLI INSPECTOR)" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource CyanAccentBrush}" Margin="0,0,0,6"/>
                                     <TextBlock Text="Проверяет, какой именно бинарник вызывается системой первым, и находит конфликтующие дубликаты." FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,12"/>
-
                                     <Grid Margin="0,0,0,12">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
@@ -1249,19 +1306,16 @@
                                         </Border>
                                         <Button Grid.Column="1" Content="Проверить вызов" Command="{Binding InspectCommandOwnerCommand}" Style="{StaticResource DarkCardButtonStyle}" Padding="16,6"/>
                                     </Grid>
-
                                     <Border Background="#090E1A" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="12" Visibility="{Binding HasInspectResult, Converter={StaticResource BoolToVis}}">
                                         <StackPanel>
                                             <TextBlock Text="ПЕРВИЧНЫЙ ИСПОЛНЯЕМЫЙ ФАЙЛ:" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/>
                                             <TextBlock Text="{Binding InspectResult.ResolvedExecutablePath}" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource CyanAccentBrush}" Margin="0,3,0,6"/>
-
                                             <TextBlock Text="ОТВЕТ ВЕРСИИ:" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/>
                                             <TextBlock Text="{Binding InspectResult.VersionOutput}" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,3,0,0" TextWrapping="Wrap"/>
                                         </StackPanel>
                                     </Border>
                                 </StackPanel>
                             </Border>
-
                             <Border Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="16">
                                 <StackPanel>
                                     <Grid Margin="0,0,0,12">
@@ -1275,7 +1329,6 @@
                                         </StackPanel>
                                         <Button Grid.Column="1" Content="🧹 Очистить проблемные пути" Command="{Binding CleanBrokenPathsCommand}" Style="{StaticResource DarkCardButtonStyle}" Foreground="#F87171" Padding="12,6"/>
                                     </Grid>
-
                                     <ItemsControl ItemsSource="{Binding PathEntries}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
@@ -1290,7 +1343,7 @@
                                                             <TextBlock Text="{Binding TypeText}" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource TextSecondaryBrush}"/>
                                                         </Border>
                                                         <TextBlock Grid.Column="1" Text="{Binding Path}" FontSize="11.5" Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center" Margin="8,0" TextTrimming="CharacterEllipsis"/>
-                                                        <TextBlock Grid.Column="2" Text="{Binding StatusText}" FontSize="10.5" FontWeight="Bold" Foreground="{Binding StatusColorHex}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                                        <TextBlock Grid.Column="2" Text="{Binding StatusText}" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource StatusColorHex}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
                                                     </Grid>
                                                 </Border>
                                             </DataTemplate>
@@ -1308,7 +1361,6 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-
                     <Border Grid.Row="0" Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10" Margin="0,0,0,14">
                         <Grid>
                             <Grid.RowDefinitions>
@@ -1333,7 +1385,6 @@
                             <ProgressBar Grid.Row="1" IsIndeterminate="True" Height="3" Background="#141C2E" Foreground="{DynamicResource CyanAccentBrush}" BorderThickness="0" Visibility="{Binding IsStartupScanning, Converter={StaticResource BoolToVis}}"/>
                         </Grid>
                     </Border>
-
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                         <ItemsControl ItemsSource="{Binding StartupItems}">
                             <ItemsControl.ItemTemplate>
@@ -1346,21 +1397,17 @@
                                                 <ColumnDefinition Width="140"/>
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
-
                                             <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0">
                                                 <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                                 <TextBlock Text="{Binding Publisher}" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0"/>
                                                 <TextBlock Text="{Binding Command}" FontSize="10" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
                                             </StackPanel>
-
                                             <Border Grid.Column="1" Background="#10FFFFFF" CornerRadius="4" Padding="6,2" HorizontalAlignment="Left" VerticalAlignment="Center">
                                                 <TextBlock Text="{Binding Location}" FontSize="10" Foreground="{DynamicResource TextSecondaryBrush}"/>
                                             </Border>
-
                                             <Border Grid.Column="2" Background="#15FFFFFF" CornerRadius="4" Padding="8,3" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,16,0">
                                                 <TextBlock Text="{Binding ImpactText}" FontSize="10" FontWeight="Bold" Foreground="{Binding ImpactColorHex}"/>
                                             </Border>
-
                                             <CheckBox Grid.Column="3" Style="{StaticResource CyanToggleSwitchStyle}" IsChecked="{Binding IsEnabled, Mode=TwoWay}" Command="{Binding DataContext.ToggleStartupItemCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" VerticalAlignment="Center"/>
                                         </Grid>
                                     </Border>
@@ -1370,7 +1417,190 @@
                     </ScrollViewer>
                 </Grid>
 
-                <!-- 7. ТВIКИ ОС -->
+                <!-- 7. СЕТЬ & ПИНГ (ИСПРАВЛЕННЫЙ И РАБОТАЮЩИЙ COMBOBOX) -->
+                <Grid Visibility="{Binding IsNetworkVisible, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <!-- БЛОК ВЫБОРА АДАПТЕРА -->
+                            <Border Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="18" Margin="0,0,0,14">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <Grid Grid.Row="0" Margin="0,0,0,12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="🌐 Выбор активного сетевого адаптера" FontSize="14.5" FontWeight="Bold" Foreground="{DynamicResource CyanAccentBrush}"/>
+                                            <TextBlock Text="Выберите физическую сетевую карту для настройки DNS и твиков задержки." FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                        <Button Grid.Column="1" Content="🔄 Обновить список" Command="{Binding RefreshAdaptersCommand}" Style="{StaticResource DarkCardButtonStyle}" Padding="12,4"/>
+                                    </Grid>
+
+                                    <Grid Grid.Row="1">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Рабочий выпадающий список ComboBox -->
+                                        <ComboBox Grid.Column="0" ItemsSource="{Binding AvailableAdapters}" SelectedItem="{Binding SelectedAdapter, Mode=TwoWay}" Height="40" Margin="0,0,12,0">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Orientation="Horizontal" Margin="2,2">
+                                                        <TextBlock Text="🔌" FontSize="14" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                                        <StackPanel VerticalAlignment="Center">
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <TextBlock Text="{Binding Name}" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" FontSize="13"/>
+                                                                <TextBlock Text="{Binding IpAddress, StringFormat='  ({0})'}" Foreground="{DynamicResource CyanAccentBrush}" FontSize="11.5" VerticalAlignment="Center"/>
+                                                            </StackPanel>
+                                                            <TextBlock Text="{Binding Description}" FontSize="10.5" Foreground="{DynamicResource TextSecondaryBrush}" TextTrimming="CharacterEllipsis" MaxWidth="520"/>
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
+
+                                        <Border Grid.Column="1" Background="#0C1526" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="14,6">
+                                            <StackPanel VerticalAlignment="Center">
+                                                <TextBlock Text="ТЕКУЩИЙ DNS АДАПТЕРА" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/>
+                                                <TextBlock Text="{Binding SelectedAdapter.CurrentDns, FallbackValue='DHCP (Автоматически)'}" FontSize="11.5" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,2,0,0"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+                                </Grid>
+                            </Border>
+
+                            <!-- Блок режима Ultra Low Latency (Nagle) -->
+                            <Border Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="18" Margin="0,0,0,14">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                            <TextBlock Text="🎮 Ultra Low Latency Mode (Nagle Disabled)" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            <Border Background="#2038BDF8" CornerRadius="4" Padding="6,1" Margin="8,0,0,0" VerticalAlignment="Center">
+                                                <TextBlock Text="Киберспорт" FontSize="9.5" FontWeight="Bold" Foreground="{DynamicResource CyanAccentBrush}"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <TextBlock Text="Отключает алгоритм Nagle (TcpAckFrequency=1, TCPNoDelay=1) для выбранного адаптера. Устраняет микро-задержку отправки TCP-пакетов в CS2, Dota 2, Valorant." FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,2,0,4"/>
+                                    </StackPanel>
+                                    <CheckBox Grid.Column="1" Style="{StaticResource CyanToggleSwitchStyle}" IsChecked="{Binding IsNagleEnabled, Mode=OneWay}" Command="{Binding ToggleNagleCommand}" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+
+                            <!-- Блок скорой помощи сети -->
+                            <UniformGrid Columns="2" Margin="0,0,0,14">
+                                <Border Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="14" Margin="0,0,6,0">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="🧹 Очистить DNS кэш" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            <TextBlock Text="Сброс таблицы локальных IP (ipconfig /flushdns)" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                        <Button Grid.Column="1" Content="Очистить" Command="{Binding FlushDnsCacheCommand}" Style="{StaticResource DarkCardButtonStyle}" Padding="12,5" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Border>
+                                <Border Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="14" Margin="6,0,0,0">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="🔄 Сброс сокетов Winsock" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            <TextBlock Text="Лечит сетевые сбои и поврежденные сокеты" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                        <Button Grid.Column="1" Content="Сбросить" Command="{Binding ResetWinsockCommand}" Style="{StaticResource DarkCardButtonStyle}" Foreground="#F87171" Padding="12,5" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Border>
+                            </UniformGrid>
+
+                            <!-- DNS Benchmark & Switcher -->
+                            <Border Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="18">
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,14">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                            <TextBlock Text="⚡ DNS Benchmark &amp; Переключатель в 1 клик" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource CyanAccentBrush}"/>
+                                            <TextBlock Text="Замеряет реальный пинг через порт 53 и ICMP. Применяет выбранный DNS к выбранному адаптеру." FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                        <Button Grid.Column="1" Content="🔄 Сброс на DHCP" Command="{Binding ResetDnsToDhcpCommand}" Style="{StaticResource DarkCardButtonStyle}" Padding="12,6" Margin="0,0,8,0"/>
+                                        <Button Grid.Column="2" Content="⚡ Замерить пинг" Command="{Binding RunDnsBenchmarkCommand}" Style="{StaticResource CyanActionButtonStyle}" Padding="14,6"/>
+                                    </Grid>
+
+                                    <ProgressBar IsIndeterminate="True" Height="3" Background="#141C2E" Foreground="{DynamicResource CyanAccentBrush}" BorderThickness="0" Margin="0,0,0,12" Visibility="{Binding IsDnsBenchmarking, Converter={StaticResource BoolToVis}}"/>
+
+                                    <ItemsControl ItemsSource="{Binding DnsServers}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Background="#090E1A" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="14,10" Margin="0,0,0,8">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="140"/>
+                                                            <ColumnDefinition Width="110"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <Border Grid.Column="0" Width="36" Height="36" CornerRadius="8" Background="#10FFFFFF" Margin="0,0,12,0" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding IconGlyph}" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                        </Border>
+
+                                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                                                <Border Background="#2010B981" CornerRadius="4" Padding="6,1" Margin="8,0,0,0" Visibility="{Binding IsFastest, Converter={StaticResource BoolToVis}}">
+                                                                    <TextBlock Text="⚡ САМЫЙ БЫСТРЫЙ" FontSize="9" FontWeight="Bold" Foreground="#10B981"/>
+                                                                </Border>
+                                                                <Border Background="#2038BDF8" CornerRadius="4" Padding="6,1" Margin="8,0,0,0" Visibility="{Binding IsCurrent, Converter={StaticResource BoolToVis}}">
+                                                                    <TextBlock Text="АКТИВЕН" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource CyanAccentBrush}"/>
+                                                                </Border>
+                                                            </StackPanel>
+                                                            <TextBlock Text="{Binding Description}" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
+                                                        </StackPanel>
+
+                                                        <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding PrimaryIp}" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                                            <TextBlock Text="{Binding SecondaryIp}" FontSize="10.5" Foreground="{DynamicResource TextMutedBrush}"/>
+                                                        </StackPanel>
+
+                                                        <StackPanel Grid.Column="3" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding PingText}" FontSize="14" FontWeight="Black" HorizontalAlignment="Left">
+                                                                <TextBlock.Foreground>
+                                                                    <SolidColorBrush Color="{Binding PingColorHex}"/>
+                                                                </TextBlock.Foreground>
+                                                            </TextBlock>
+                                                            <TextBlock Text="Задержка" FontSize="9.5" Foreground="{DynamicResource TextMutedBrush}"/>
+                                                        </StackPanel>
+
+                                                        <Button Grid.Column="4" Content="Выбрать" Command="{Binding DataContext.ApplyDnsServerCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Style="{StaticResource DarkCardButtonStyle}" Padding="14,6" VerticalAlignment="Center"/>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+
+                <!-- 8. ТВIКИ ОС -->
                 <Grid Visibility="{Binding IsTweaksVisible, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -1383,7 +1613,7 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="🔍" VerticalAlignment="Center" Foreground="{DynamicResource TextSecondaryBrush}"/>
-                            <TextBox Grid.Column="1" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Background="Transparent" Foreground="{DynamicResource TextPrimaryBrush}" BorderThickness="0" FontSize="13" VerticalContentAlignment="Center"/>
+                            <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Grid.Column="1" Background="Transparent" Foreground="{DynamicResource TextPrimaryBrush}" BorderThickness="0" FontSize="13" VerticalContentAlignment="Center"/>
                         </Grid>
                     </Border>
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
@@ -1408,7 +1638,6 @@
                                                 </StackPanel>
                                                 <CheckBox Grid.Column="1" Style="{StaticResource CyanToggleSwitchStyle}" IsChecked="{Binding TargetState, Mode=TwoWay}" VerticalAlignment="Center"/>
                                             </Grid>
-
                                             <ToggleButton Content="ℹ️ Подробнее (Why?)" IsChecked="{Binding IsExpanded, Mode=TwoWay}" Background="Transparent" Foreground="{DynamicResource CyanAccentBrush}" BorderThickness="0" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Left" Margin="0,6,0,0" Cursor="Hand">
                                                 <ToggleButton.Template>
                                                     <ControlTemplate TargetType="ToggleButton">
@@ -1416,11 +1645,9 @@
                                                     </ControlTemplate>
                                                 </ToggleButton.Template>
                                             </ToggleButton>
-
                                             <Border Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}" Background="#0A0E1A" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,8,0,0">
                                                 <StackPanel>
-                                                    <TextBlock Text="{Binding Metadata.WhatItDoes, StringFormat='Что делает: {0}'}" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
-                                                    <TextBlock Text="{Binding RebootText, StringFormat='Эффект: {0}'}" FontSize="11" Foreground="{DynamicResource CyanGlowBrush}" Margin="0,3,0,0"/>
+                                                    <TextBlock Text="{Binding RebootText, StringFormat='Эффект: {0}'}" FontSize="11" Foreground="{DynamicResource CyanGlowBrush}" Margin="0,1,0,0"/>
                                                 </StackPanel>
                                             </Border>
                                         </StackPanel>
@@ -1431,14 +1658,13 @@
                     </ScrollViewer>
                 </Grid>
 
-                <!-- 8. НАСТРОЙКИ ТВIКЕРА -->
+                <!-- 9. НАСТРОЙКИ ТВIКЕРА -->
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding IsSettingsVisible, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
                     <StackPanel>
                         <Border Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="18" Margin="0,0,0,14">
                             <StackPanel>
                                 <TextBlock Text="🎨 ЦВЕТОВАЯ ТЕМА" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource CyanAccentBrush}" Margin="0,0,0,4"/>
                                 <TextBlock Text="Мягкие дизайнерские палитры без едких кислотных оттенков. Применяются мгновенно." FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,14"/>
-
                                 <ItemsControl ItemsSource="{Binding AvailableThemes}">
                                     <ItemsControl.ItemsPanel>
                                         <ItemsPanelTemplate>
@@ -1462,7 +1688,6 @@
                                 </ItemsControl>
                             </StackPanel>
                         </Border>
-
                         <Border Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="18" Margin="0,0,0,14">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -1477,13 +1702,12 @@
                                 <Button Grid.Column="1" Content="🧹 Очистить кэш" Command="{Binding ClearDiskCacheCommand}" Style="{StaticResource DarkCardButtonStyle}" Foreground="#F87171" Padding="14,8" VerticalAlignment="Center"/>
                             </Grid>
                         </Border>
-
                         <Border Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="18">
                             <StackPanel>
                                 <TextBlock Text="ℹ️ О ПРИЛОЖЕНИИ" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource CyanAccentBrush}" Margin="0,0,0,12"/>
                                 <Grid Margin="0,0,0,6">
                                     <TextBlock Text="Версия:" Foreground="{DynamicResource TextSecondaryBrush}"/>
-                                    <TextBlock Text="v0.8.5 · PRO" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Right"/>
+                                    <TextBlock Text="v0.8.2 · PRO" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Right"/>
                                 </Grid>
                                 <Grid Margin="0,0,0,6">
                                     <TextBlock Text="Разработчик:" Foreground="{DynamicResource TextSecondaryBrush}"/>
@@ -1499,7 +1723,7 @@
                 </ScrollViewer>
             </Grid>
 
-            <!-- 4. НИЖНЯЯ ПАНЕЛЬ ПРИМЕНЕНИЯ С ПРОГРЕСС-БАРОМ -->
+            <!-- НИЖНЯЯ ПАНЕЛЬ ПРИМЕНЕНИЯ -->
             <Border Grid.Row="3" Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource CyanAccentBrush}" BorderThickness="1" CornerRadius="10" Padding="14,10" Margin="0,12,0,0" Visibility="{Binding HasPendingChanges, Converter={StaticResource BoolToVis}}">
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -1518,7 +1742,7 @@
             </Border>
         </Grid>
 
-        <!-- МОДАЛЬНАЯ ШТОРКА: ЖУРНАЛ АУДИТА & UNDO -->
+        <!-- ЖУРНАЛ АУДИТА & ROLLBACK -->
         <Border Grid.ColumnSpan="2" Background="#D004070F" Panel.ZIndex="5000" Visibility="{Binding IsHistoryOpen, Converter={StaticResource BoolToVis}}">
             <Border Background="#0C1220" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="14" Width="680" Height="520" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="20">
                 <Grid>
@@ -1526,7 +1750,6 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-
                     <Grid Grid.Row="0" Margin="0,0,0,16">
                         <StackPanel>
                             <TextBlock Text="📋 Журнал транзакций &amp; Rollback" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/>
@@ -1534,7 +1757,6 @@
                         </StackPanel>
                         <Button Content="✕" Command="{Binding ToggleHistoryCommand}" Style="{StaticResource DarkCardButtonStyle}" HorizontalAlignment="Right" VerticalAlignment="Top" Padding="10,4"/>
                     </Grid>
-
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                         <ItemsControl ItemsSource="{Binding AuditHistory}">
                             <ItemsControl.ItemTemplate>
@@ -1553,7 +1775,6 @@
                                                 <TextBlock Text="{Binding Details}" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,3,0,0"/>
                                                 <TextBlock Text="Снимок реестра/службы сохранён" FontSize="10" Foreground="#10B981" Margin="0,2,0,0"/>
                                             </StackPanel>
-
                                             <Button Grid.Column="1" Content="↩️ Откатить" Command="{Binding DataContext.RollbackTransactionCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding Id}" Style="{StaticResource DarkCardButtonStyle}" Foreground="#F87171" FontWeight="Bold" Padding="10,5" VerticalAlignment="Center"/>
                                         </Grid>
                                     </Border>
@@ -1565,20 +1786,17 @@
             </Border>
         </Border>
 
-        <!-- СПЛЭШ-СКРИН С ИКОНКОЙ ПРИЛОЖЕНИЯ -->
+        <!-- СПЛЭШ-СКРИН -->
         <Grid Grid.ColumnSpan="2" Background="#FA060910" Panel.ZIndex="9999" Visibility="{Binding IsAppLoading, Converter={StaticResource BoolToVis}}">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Width="360">
                 <Border Width="104" Height="104" CornerRadius="22" Background="#0C1526" BorderBrush="{DynamicResource CyanAccentBrush}" BorderThickness="2" HorizontalAlignment="Center" Margin="0,0,0,22">
-                    <Image Source="pack://application:,,,/Hero.ico" 
-                           Width="72" Height="72" 
-                           RenderOptions.BitmapScalingMode="HighQuality" 
-                           VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                    <Image Source="pack://application:,,,/Hero.ico" Width="72" Height="72" RenderOptions.BitmapScalingMode="HighQuality" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                 </Border>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,4">
                     <TextBlock Text="Hero" FontSize="28" FontWeight="Black" Foreground="{DynamicResource TextPrimaryBrush}" />
                     <TextBlock Text="Tweaker" FontSize="28" FontWeight="Light" Foreground="{DynamicResource CyanAccentBrush}" />
                 </StackPanel>
-                <TextBlock Text="Hero Engineering • v0.8.5" FontSize="11" Foreground="{DynamicResource CyanGlowBrush}" HorizontalAlignment="Center" Margin="0,0,0,24" FontWeight="SemiBold"/>
+                <TextBlock Text="Hero Engineering • v0.8.2" FontSize="11" Foreground="{DynamicResource CyanGlowBrush}" HorizontalAlignment="Center" Margin="0,0,0,24" FontWeight="SemiBold"/>
                 <ProgressBar Value="{Binding SplashProgress}" Maximum="100" Height="4" Background="#141C2E" Foreground="{DynamicResource CyanAccentBrush}" BorderThickness="0" Margin="0,0,0,10"/>
                 <TextBlock Text="{Binding SplashStatus}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center"/>
             </StackPanel>

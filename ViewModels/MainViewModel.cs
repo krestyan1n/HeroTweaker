@@ -72,8 +72,9 @@ public class MainViewModel : ObservableObject
     public bool IsAppsVisible => SelectedCategory == "Приложения";
     public bool IsDeveloperVisible => SelectedCategory == "Developer";
     public bool IsStartupVisible => SelectedCategory == "Автозагрузка";
+    public bool IsNetworkVisible => SelectedCategory == "Сеть & Пинг";
     public bool IsSettingsVisible => SelectedCategory == "Настройки";
-    public bool IsTweaksVisible => !IsDashboardVisible && !IsDiskVisible && !IsDriversVisible && !IsAppsVisible && !IsSettingsVisible && !IsDeveloperVisible && !IsStartupVisible;
+    public bool IsTweaksVisible => !IsDashboardVisible && !IsDiskVisible && !IsDriversVisible && !IsAppsVisible && !IsSettingsVisible && !IsDeveloperVisible && !IsStartupVisible && !IsNetworkVisible;
     public bool IsSearchVisible => IsTweaksVisible;
 
     // === ДИНАМИЧЕСКИЙ ПОДЗАГОЛОВОК ВКЛАДКИ ===
@@ -85,9 +86,38 @@ public class MainViewModel : ObservableObject
         "Приложения" => "Пакетный менеджер Winget и каталог популярного ПО",
         "Developer" => "Диагностика SDK, компиляторов и переменных PATH",
         "Автозагрузка" => "Контроль фоновых программ и ускорение загрузки системы",
+        "Сеть & Пинг" => "Выбор адаптера, DNS бенчмарк и оптимизация игрового пинга",
         "Настройки" => "Персонализация интерфейса, цветовые темы и кэш",
         _ => "Управление и оптимизация параметров операционной системы"
     };
+
+    // === СЕТЬ: ВЫБОР АДАПТЕРА И DNS BENCHMARK ===
+    public ObservableCollection<NetworkAdapterInfo> AvailableAdapters { get; } = new();
+
+    private NetworkAdapterInfo? _selectedAdapter;
+    public NetworkAdapterInfo? SelectedAdapter
+    {
+        get => _selectedAdapter;
+        set
+        {
+            if (SetField(ref _selectedAdapter, value))
+            {
+                OnAdapterSelectionChanged();
+            }
+        }
+    }
+
+    public ObservableCollection<DnsServerItem> DnsServers { get; } = new(NetworkOptimizerService.GetPredefinedDnsList());
+
+    private bool _isDnsBenchmarking;
+    public bool IsDnsBenchmarking { get => _isDnsBenchmarking; set => SetField(ref _isDnsBenchmarking, value); }
+
+    private bool _isNagleEnabled;
+    public bool IsNagleEnabled
+    {
+        get => _isNagleEnabled;
+        set => SetField(ref _isNagleEnabled, value);
+    }
 
     // === АВТОЗАГРУЗКА (STARTUP DOCTOR) ===
     public ObservableCollection<StartupItemModel> StartupItems { get; } = new();
@@ -345,6 +375,7 @@ public class MainViewModel : ObservableObject
                 OnPropertyChanged(nameof(IsAppsVisible));
                 OnPropertyChanged(nameof(IsDeveloperVisible));
                 OnPropertyChanged(nameof(IsStartupVisible));
+                OnPropertyChanged(nameof(IsNetworkVisible));
                 OnPropertyChanged(nameof(IsSettingsVisible));
                 OnPropertyChanged(nameof(IsTweaksVisible));
                 OnPropertyChanged(nameof(IsSearchVisible));
@@ -365,6 +396,11 @@ public class MainViewModel : ObservableObject
                 else if (value == "Автозагрузка" && StartupItems.Count == 0)
                 {
                     _ = RefreshStartupItemsAsync();
+                }
+                else if (value == "Сеть & Пинг")
+                {
+                    RefreshNetworkAdapters();
+                    _ = BenchmarkDnsCommandAction();
                 }
                 else if (value == "Настройки")
                 {
@@ -418,6 +454,15 @@ public class MainViewModel : ObservableObject
     public ICommand ExecuteCleanDiskCategoriesCommand { get; }
     public ICommand ScanStartupCommand { get; }
     public ICommand ToggleStartupItemCommand { get; }
+
+    // Сетевые команды
+    public ICommand RunDnsBenchmarkCommand { get; }
+    public ICommand ApplyDnsServerCommand { get; }
+    public ICommand ResetDnsToDhcpCommand { get; }
+    public ICommand FlushDnsCacheCommand { get; }
+    public ICommand ResetWinsockCommand { get; }
+    public ICommand ToggleNagleCommand { get; }
+    public ICommand RefreshAdaptersCommand { get; }
 
     public MainViewModel()
     {
@@ -482,6 +527,107 @@ public class MainViewModel : ObservableObject
                 bool targetState = item.IsEnabled;
                 await StartupService.SetStartupItemStateAsync(item, targetState);
                 OnPropertyChanged(nameof(HighImpactStartupCount));
+            }
+        });
+
+        // СЕТЕВЫЕ КОМАНДЫ
+        RefreshAdaptersCommand = new RelayCommand(RefreshNetworkAdapters);
+        RunDnsBenchmarkCommand = new RelayCommand(async () => await BenchmarkDnsCommandAction(), () => !IsDnsBenchmarking);
+
+        ApplyDnsServerCommand = new RelayCommand(async p =>
+        {
+            if (p is DnsServerItem server && SelectedAdapter != null)
+            {
+                try
+                {
+                    IsGlobalBusy = true;
+                    StatusMessage = $"Применение {server.Name} на адаптер '{SelectedAdapter.Name}'...";
+                    await NetworkOptimizerService.ApplyDnsAsync(SelectedAdapter.Name, server.PrimaryIp, server.SecondaryIp);
+                    RefreshNetworkAdapters();
+                    MessageBox.Show($"DNS успешно переключен на {server.Name} ({server.PrimaryIp}) для адаптера '{SelectedAdapter.Name}'", "Сетевой оптимизатор", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                catch (Exception ex) { MessageBox.Show(ex.Message, "Ошибка DNS", MessageBoxButton.OK, MessageBoxImage.Error); }
+                finally
+                {
+                    IsGlobalBusy = false;
+                    StatusMessage = string.Empty;
+                }
+            }
+        });
+
+        ResetDnsToDhcpCommand = new RelayCommand(async () =>
+        {
+            if (SelectedAdapter != null)
+            {
+                try
+                {
+                    IsGlobalBusy = true;
+                    StatusMessage = $"Сброс DNS на DHCP для '{SelectedAdapter.Name}'...";
+                    await NetworkOptimizerService.ResetDnsToDhcpAsync(SelectedAdapter.Name);
+                    RefreshNetworkAdapters();
+                    MessageBox.Show("DNS сброшен в автоматический режим (от провайдера/роутера).", "Сетевой оптимизатор", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                catch (Exception ex) { MessageBox.Show(ex.Message, "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error); }
+                finally
+                {
+                    IsGlobalBusy = false;
+                    StatusMessage = string.Empty;
+                }
+            }
+        });
+
+        FlushDnsCacheCommand = new RelayCommand(async () =>
+        {
+            try
+            {
+                IsGlobalBusy = true;
+                StatusMessage = "Очистка кэша DNS...";
+                await NetworkOptimizerService.FlushDnsCacheAsync();
+                MessageBox.Show("Кэш DNS успешно очищен (ipconfig /flushdns).", "Сетевой оптимизатор", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            finally
+            {
+                IsGlobalBusy = false;
+                StatusMessage = string.Empty;
+            }
+        });
+
+        ResetWinsockCommand = new RelayCommand(async () =>
+        {
+            var res = MessageBox.Show("Сбросить сетевой стек Winsock и протоколы TCP/IP?\n\nДля полного применения потребуется перезагрузка ПК.", "Сброс сети", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (res == MessageBoxResult.Yes)
+            {
+                try
+                {
+                    IsGlobalBusy = true;
+                    StatusMessage = "Сброс каталога Winsock и протоколов TCP/IP...";
+                    await NetworkOptimizerService.ResetWinsockAndTcpAsync();
+                    MessageBox.Show("Сетевой стек успешно сброшен. Рекомендуется перезагрузить систему.", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                finally
+                {
+                    IsGlobalBusy = false;
+                    StatusMessage = string.Empty;
+                }
+            }
+        });
+
+        ToggleNagleCommand = new RelayCommand(async () =>
+        {
+            bool newState = !IsNagleEnabled;
+            IsGlobalBusy = true;
+            StatusMessage = newState ? "Включение режима Ultra Low Latency..." : "Отключение твиков Nagle...";
+            try
+            {
+                string? guid = SelectedAdapter?.Id;
+                await NetworkOptimizerService.OptimizeNagleAlgorithmAsync(guid, newState);
+                IsNagleEnabled = newState;
+                MessageBox.Show(newState ? "Алгоритм Nagle отключен (TCPNoDelay=1, TcpAckFrequency=1).\nПакеты в играх теперь отправляются мгновенно!" : "Алгоритм Nagle возвращен к стандартным настройкам Windows.", "Игровая задержка", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            finally
+            {
+                IsGlobalBusy = false;
+                StatusMessage = string.Empty;
             }
         });
 
@@ -872,10 +1018,56 @@ public class MainViewModel : ObservableObject
         });
 
         RefreshAvailableDrives();
+        RefreshNetworkAdapters();
         RegisterTweaks();
         RefreshAuditHistory();
         StartRealTimeTelemetry();
         _ = InitializeAppAsync();
+    }
+
+    private void RefreshNetworkAdapters()
+    {
+        try
+        {
+            var adapters = NetworkOptimizerService.GetAllPhysicalAdapters();
+            AvailableAdapters.Clear();
+            foreach (var a in adapters) AvailableAdapters.Add(a);
+
+            if (SelectedAdapter == null || !AvailableAdapters.Any(a => a.Name == SelectedAdapter.Name))
+            {
+                SelectedAdapter = AvailableAdapters.FirstOrDefault(a => a.IsUp) ?? AvailableAdapters.FirstOrDefault();
+            }
+            else
+            {
+                OnAdapterSelectionChanged();
+            }
+        }
+        catch { }
+    }
+
+    private void OnAdapterSelectionChanged()
+    {
+        if (SelectedAdapter == null) return;
+
+        IsNagleEnabled = NetworkOptimizerService.IsNagleOptimized(SelectedAdapter.Id);
+
+        foreach (var s in DnsServers)
+        {
+            s.IsCurrent = SelectedAdapter.CurrentDns.Contains(s.PrimaryIp);
+        }
+    }
+
+    private async Task BenchmarkDnsCommandAction()
+    {
+        IsDnsBenchmarking = true;
+        try
+        {
+            await NetworkOptimizerService.MeasureDnsLatencyAsync(DnsServers);
+        }
+        finally
+        {
+            IsDnsBenchmarking = false;
+        }
     }
 
     public async Task RefreshStartupItemsAsync()
@@ -1322,7 +1514,7 @@ public class MainViewModel : ObservableObject
     }
 
     // =====================================================================================
-    // УЛЬТИМАТИВНЫЙ ДВИЖОК РЕГИСТРАЦИИ (Только RegistryTweak с двойным контролем)
+    // ДВИЖОК РЕГИСТРАЦИИ ТВИКОВ (С двойным контролем реестра и служб)
     // =====================================================================================
 
     private void RegTweak(string id, string name, string desc, string cat, RegistryHive hive, string path, string valName, object targetVal, object defVal, bool delKey = false, bool isFeatured = false, RiskLevel risk = RiskLevel.Safe)
@@ -1387,9 +1579,6 @@ public class MainViewModel : ObservableObject
     private void SrvTweak(string id, string name, string desc, string srvName, int defMode, bool isFeatured = false, RiskLevel risk = RiskLevel.Safe)
     {
         string path = $@"SYSTEM\CurrentControlSet\Services\{srvName}";
-
-        // ВАЖНО: Используем RegistryTweak. 4 = Отключено (Disabled).
-        // Это гарантирует, что IsApplied() мгновенно считает Start=4 из реестра.
         var tweak = new RegistryTweak(id, name, desc, "Службы", RegistryHive.LocalMachine, path, "Start", 4, defMode);
 
         Func<Task> revertAction = () => Task.Run(() =>
@@ -1418,7 +1607,7 @@ public class MainViewModel : ObservableObject
             var r = new TransactionRecord { TweakId = id, TweakName = name, Category = "Службы" };
             try
             {
-                var s = TransactionManager.CreateRegistrySnapshot(RegistryHive.LocalMachine, path, "Start");
+                var s = TransactionManager.CreateServiceSnapshot(srvName);
                 if (s != null) r.Snapshots.Add(s);
             }
             catch { }
@@ -1453,9 +1642,9 @@ public class MainViewModel : ObservableObject
         RegTweak("app_diagnostics", "Запретить программам доступ к диагностике", "Ограничивает фоновый доступ сторонних программ к журналу диагностики.", "Приватность", RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\AppPrivacy", "LetAppsGetDiagnosticInfo", 2, 0);
         RegTweak("location_tracking", "Отключить службы геолокации", "Блокирует встроенные датчики местоположения.", "Приватность", RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors", "DisableLocation", 1, 0);
 
-        // === 2. ПРИВАТНОСТЬ (ADVANCED / ЖЕЛТЫЕ) ===
-        RegTweak("uac_disable", "Отключить UAC (Контроль учетных записей)", "Полностью отключает затемнение экрана и надоедливые предупреждения при запуске программ от имени администратора. Снижает базовую защиту ОС от вирусов.", "Приватность", RegistryHive.LocalMachine, @"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System", "EnableLUA", 0, 1, risk: RiskLevel.Advanced);
-        RegTweak("smartscreen_disable", "Отключить фильтр SmartScreen", "Отключает облачную проверку запускаемых файлов и сайтов. Ускоряет запуск новых программ, но убирает предупреждения о подозрительных файлах.", "Приватность", RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\System", "EnableSmartScreen", 0, 1, risk: RiskLevel.Advanced);
+        // === 2. ПРИВАТНОСТЬ (ADVANCED) ===
+        RegTweak("uac_disable", "Отключить UAC (Контроль учетных записей)", "Полностью отключает затемнение экрана и предупреждения при запуске программ. Снижает базовую безопасность ОС.", "Приватность", RegistryHive.LocalMachine, @"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System", "EnableLUA", 0, 1, risk: RiskLevel.Advanced);
+        RegTweak("smartscreen_disable", "Отключить фильтр SmartScreen", "Отключает проверку запускаемых файлов в интернете. Ускоряет запуск софта, но отключает предупреждения.", "Приватность", RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\System", "EnableSmartScreen", 0, 1, risk: RiskLevel.Advanced);
 
         // === 3. ПРОИЗВОДИТЕЛЬНОСТЬ (SAFE) ===
         RegTweak("anim_disable", "Отключить анимации окон", "Мгновенный отклик интерфейса без задержек при сворачивании окон.", "Производительность", RegistryHive.CurrentUser, @"Control Panel\Desktop\WindowMetrics", "MinAnimate", "0", "1", isFeatured: true);
@@ -1466,9 +1655,9 @@ public class MainViewModel : ObservableObject
         RegTweak("game_bar_fts", "Отключить оверлей Game Bar", "Снимает оверлей Xbox и освобождает видеопамять.", "Производительность", RegistryHive.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\GameDVR", "AppCaptureEnabled", 0, 1);
         RegTweak("hags_gpu", "Аппаратное ускорение планирования GPU (HAGS)", "Снижает задержки графического конвейера видеокарты.", "Производительность", RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\GraphicsDrivers", "HwSchMode", 2, 1);
 
-        // === 4. ПРОИЗВОДИТЕЛЬНОСТЬ (ADVANCED / ЖЕЛТЫЕ) ===
-        RegTweak("vbs_disable", "Отключить VBS и Core Isolation", "Отключает аппаратную изоляцию ядра (Virtualization-Based Security). Дает чистый прирост FPS до 10% в играх, но ослабляет защиту ядра ОС от руткитов.", "Производительность", RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\DeviceGuard", "EnableVirtualizationBasedSecurity", 0, 1, risk: RiskLevel.Advanced);
-        RegTweak("ipv6_disable", "Отключить протокол IPv6", "Принудительно отключает IPv6 на уровне системы. Снижает задержки в старых онлайн-играх, но может нарушить работу Xbox Live Multiplayer.", "Производительность", RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters", "DisabledComponents", 0xFF, 0x00, risk: RiskLevel.Advanced);
+        // === 4. ПРОИЗВОДИТЕЛЬНОСТЬ (ADVANCED) ===
+        RegTweak("vbs_disable", "Отключить VBS и Core Isolation", "Отключает изоляцию ядра. Дает чистый прирост FPS до 10% в играх, но ослабляет защиту ядра ОС.", "Производительность", RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\DeviceGuard", "EnableVirtualizationBasedSecurity", 0, 1, risk: RiskLevel.Advanced);
+        RegTweak("ipv6_disable", "Отключить протокол IPv6", "Отключает IPv6 на уровне системы. Снижает задержки в ряде игр, но может затронуть сервисы Microsoft.", "Производительность", RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters", "DisabledComponents", 0xFF, 0x00, risk: RiskLevel.Advanced);
 
         // === 5. СЛУЖБЫ (SAFE) ===
         SrvTweak("service_diagtrack", "Отключить службу телеметрии (DiagTrack)", "Останавливает службу сбора и фоновой отправки телеметрии.", "DiagTrack", 2);
@@ -1477,14 +1666,14 @@ public class MainViewModel : ObservableObject
         SrvTweak("service_wersvc", "Отключить службу регистрации ошибок (WerSvc)", "Блокирует сбор дампов и отправку отчетов о сбоях в Microsoft.", "WerSvc", 3);
         SrvTweak("service_remotereg", "Отключить службу удаленного реестра (RemoteRegistry)", "Блокирует удаленный сетевой доступ к системному реестру.", "RemoteRegistry", 4);
 
-        // === 6. СЛУЖБЫ (EXPERIMENTAL / КРАСНЫЕ) ===
-        RegTweak("defender_disable", "Отключить Windows Defender", "Блокирует встроенный системный антивирус. ВНИМАНИЕ: Требует предварительного ручного отключения 'Защиты от подделки' в настройках безопасности Windows!", "Службы", RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows Defender", "DisableAntiSpyware", 1, 0, risk: RiskLevel.Experimental);
-        SrvTweak("service_wuauserv", "Остановить Центр Обновлений Windows", "Блокирует службу автоматических апдейтов (wuauserv). Вы перестанете получать системные патчи безопасности и драйверы.", "wuauserv", 3, risk: RiskLevel.Experimental);
+        // === 6. СЛУЖБЫ (EXPERIMENTAL) ===
+        RegTweak("defender_disable", "Отключить Windows Defender", "Блокирует встроенный защитник. ВНИМАНИЕ: Требует отключения 'Защиты от подделки' в настройках безопасности Windows!", "Службы", RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows Defender", "DisableAntiSpyware", 1, 0, risk: RiskLevel.Experimental);
+        SrvTweak("service_wuauserv", "Остановить Центр Обновлений Windows", "Блокирует службу апдейтов (wuauserv). Вы перестанете получать системные патчи безопасности.", "wuauserv", 3, risk: RiskLevel.Experimental);
 
         // === 7. ИНТЕРФЕЙС И ОБНОВЛЕНИЯ (SAFE) ===
-        RegTweak("classic_context_menu", "Классическое контекстное меню (Win 10)", "Возвращает меню без кнопки «Показать дополнительные параметры».", "Интерфейс", RegistryHive.CurrentUser, @"Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32", "", "", "", delKey: true, isFeatured: true);
+        RegTweak("classic_context_menu", "Классическое контекстное меню (Win 10)", "Возвращает классическое меню без кнопки «Показать дополнительные параметры».", "Интерфейс", RegistryHive.CurrentUser, @"Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32", "", "", "", delKey: true, isFeatured: true);
         RegTweak("show_file_extensions", "Показывать расширения файлов", "Отображает реальные расширения файлов (.exe, .zip, .txt).", "Интерфейс", RegistryHive.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "HideFileExt", 0, 1);
         RegTweak("this_pc_default", "Открывать «Этот компьютер» в Проводнике", "Вместо стартового экрана «Главная» или «Быстрый доступ».", "Интерфейс", RegistryHive.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "LaunchTo", 1, 2);
-        RegTweak("disable_driver_updates", "Запретить замену драйверов через WU", "Предотвращает автоматическую замену ваших драйверов GPU и чипсета более старыми версиями от Microsoft.", "Обновления", RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate", "ExcludeWUDriversInQualityUpdate", 1, 0, delKey: true);
+        RegTweak("disable_driver_updates", "Запретить замену драйверов через WU", "Предотвращает автоматическую замену ваших драйверов GPU более старыми версиями от Microsoft.", "Обновления", RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate", "ExcludeWUDriversInQualityUpdate", 1, 0, delKey: true);
     }
 }
