@@ -422,7 +422,7 @@
                     </Border>
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="HeroTweaker" FontSize="17" FontWeight="Black" Foreground="{DynamicResource TextPrimaryBrush}" />
-                        <TextBlock Text="v0.8.2 · PRO" FontSize="10" Foreground="{DynamicResource CyanAccentBrush}" FontWeight="Bold" Margin="0,2,0,0"/>
+                        <TextBlock Text="v0.8.6 · Beta" FontSize="10" Foreground="{DynamicResource CyanAccentBrush}" FontWeight="Bold" Margin="0,2,0,0"/>
                     </StackPanel>
                 </StackPanel>
 
@@ -1707,7 +1707,7 @@
                                 <TextBlock Text="ℹ️ О ПРИЛОЖЕНИИ" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource CyanAccentBrush}" Margin="0,0,0,12"/>
                                 <Grid Margin="0,0,0,6">
                                     <TextBlock Text="Версия:" Foreground="{DynamicResource TextSecondaryBrush}"/>
-                                    <TextBlock Text="v0.8.2 · PRO" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Right"/>
+                                    <TextBlock Text="v0.8.6 · Beta" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Right"/>
                                 </Grid>
                                 <Grid Margin="0,0,0,6">
                                     <TextBlock Text="Разработчик:" Foreground="{DynamicResource TextSecondaryBrush}"/>
@@ -1796,7 +1796,7 @@
                     <TextBlock Text="Hero" FontSize="28" FontWeight="Black" Foreground="{DynamicResource TextPrimaryBrush}" />
                     <TextBlock Text="Tweaker" FontSize="28" FontWeight="Light" Foreground="{DynamicResource CyanAccentBrush}" />
                 </StackPanel>
-                <TextBlock Text="Hero Engineering • v0.8.2" FontSize="11" Foreground="{DynamicResource CyanGlowBrush}" HorizontalAlignment="Center" Margin="0,0,0,24" FontWeight="SemiBold"/>
+                <TextBlock Text="Hero Engineering • v0.8.6 · Beta" FontSize="11" Foreground="{DynamicResource CyanGlowBrush}" HorizontalAlignment="Center" Margin="0,0,0,24" FontWeight="SemiBold"/>
                 <ProgressBar Value="{Binding SplashProgress}" Maximum="100" Height="4" Background="#141C2E" Foreground="{DynamicResource CyanAccentBrush}" BorderThickness="0" Margin="0,0,0,10"/>
                 <TextBlock Text="{Binding SplashStatus}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center"/>
             </StackPanel>
