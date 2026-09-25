@@ -1,28 +1,59 @@
 ﻿using System;
-using System.Collections.Generic;
 using HeroTweaker.ViewModels.Base;
 
 namespace HeroTweaker.Core.Models;
 
 public class DiskItemModel : ObservableObject
 {
-    public string Name { get; set; } = string.Empty;
-    public string FullPath { get; set; } = string.Empty;
-    public long SizeBytes { get; set; }
-    public string FormattedSize => FormatBytes(SizeBytes);
-    public double Percentage { get; set; }
-    public bool IsFolder { get; set; }
-    public string ColorHex { get; set; } = "#6366F1";
+    private string _name = string.Empty;
+    public string Name
+    {
+        get => _name;
+        set => SetField(ref _name, value);
+    }
 
-    // Параметры геометрии диаграммы
-    public double StartAngle { get; set; }
-    public double SweepAngle { get; set; }
-    public int RingLevel { get; set; } = 1; // 1 = внутреннее кольцо, 2 = внешнее кольцо
+    private string _fullPath = string.Empty;
+    public string FullPath
+    {
+        get => _fullPath;
+        set => SetField(ref _fullPath, value);
+    }
 
-    public DiskItemModel? Parent { get; set; }
-    public List<DiskItemModel> Children { get; set; } = new();
+    private long _sizeBytes;
+    public long SizeBytes
+    {
+        get => _sizeBytes;
+        set
+        {
+            if (SetField(ref _sizeBytes, value))
+            {
+                OnPropertyChanged(nameof(FormattedSize));
+            }
+        }
+    }
 
-    // Состояние подсветки для двухсторонней синхронизации
+    private bool _isFolder;
+    public bool IsFolder
+    {
+        get => _isFolder;
+        set => SetField(ref _isFolder, value);
+    }
+
+    private double _percentage;
+    public double Percentage
+    {
+        get => _percentage;
+        set => SetField(ref _percentage, value);
+    }
+
+    private string _colorHex = "#38BDF8";
+    public string ColorHex
+    {
+        get => _colorHex;
+        set => SetField(ref _colorHex, value);
+    }
+
+    // Состояние наведения мыши для подсветки в DiskDonutChart
     private bool _isHovered;
     public bool IsHovered
     {
@@ -30,17 +61,54 @@ public class DiskItemModel : ObservableObject
         set => SetField(ref _isHovered, value);
     }
 
+    // Уровень кольца диаграммы (1 - внутреннее, 2 - внешнее)
+    private int _ringLevel = 1;
+    public int RingLevel
+    {
+        get => _ringLevel;
+        set
+        {
+            if (SetField(ref _ringLevel, value))
+            {
+                OnPropertyChanged(nameof(Level));
+            }
+        }
+    }
+
+    // Псевдоним для совместимости со сканером и кэшем
+    public int Level
+    {
+        get => RingLevel;
+        set => RingLevel = value;
+    }
+
+    private double _startAngle;
+    public double StartAngle
+    {
+        get => _startAngle;
+        set => SetField(ref _startAngle, value);
+    }
+
+    private double _sweepAngle;
+    public double SweepAngle
+    {
+        get => _sweepAngle;
+        set => SetField(ref _sweepAngle, value);
+    }
+
+    public string FormattedSize => FormatBytes(SizeBytes);
+
     public static string FormatBytes(long bytes)
     {
-        string[] suffixes = { "Б", "КБ", "МБ", "ГБ", "ТБ" };
-        int counter = 0;
-        decimal number = bytes;
-        while (Math.Round(number / 1024) >= 1)
+        if (bytes <= 0) return "0 Б";
+        string[] units = { "Б", "КБ", "МБ", "ГБ", "ТБ" };
+        int i = 0;
+        double d = bytes;
+        while (d >= 1024 && i < units.Length - 1)
         {
-            number /= 1024;
-            counter++;
-            if (counter >= suffixes.Length - 1) break;
+            d /= 1024;
+            i++;
         }
-        return $"{number:F1} {suffixes[counter]}";
+        return $"{d:0.##} {units[i]}";
     }
 }

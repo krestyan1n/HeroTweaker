@@ -455,7 +455,6 @@ public class MainViewModel : ObservableObject
     public ICommand ScanStartupCommand { get; }
     public ICommand ToggleStartupItemCommand { get; }
 
-    // Сетевые команды
     public ICommand RunDnsBenchmarkCommand { get; }
     public ICommand ApplyDnsServerCommand { get; }
     public ICommand ResetDnsToDhcpCommand { get; }
@@ -1633,47 +1632,105 @@ public class MainViewModel : ObservableObject
 
     private void RegisterTweaks()
     {
-        // === 1. ПРИВАТНОСТЬ (SAFE) ===
+        // =========================================================================================
+        // 1. ПРИВАТНОСТЬ (16 ТВIКОВ)
+        // =========================================================================================
         RegTweak("telemetry_disable", "Отключить телеметрию Windows", "Ограничивает сбор данных диагностических служб Microsoft.", "Приватность", RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\DataCollection", "AllowTelemetry", 0, 1, isFeatured: true);
         RegTweak("advertising_id_disable", "Запретить рекламный ID", "Блокирует показ персонализированной рекламы в приложениях.", "Приватность", RegistryHive.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo", "Enabled", 0, 1, isFeatured: true);
         RegTweak("cortana_disable", "Отключить Cortana", "Блокирует фоновый голосовой ассистент.", "Приватность", RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\Windows Search", "AllowCortana", 0, 1, delKey: true, isFeatured: true);
         RegTweak("activity_history", "Отключить журнал активности", "Запрещает Windows сохранять историю запущенных задач.", "Приватность", RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\System", "PublishUserActivities", 0, 1);
-        RegTweak("typing_telemetry", "Отключить сбор данных ввода с клавиатуры", "Блокирует отправку шаблонов рукописного и экранного ввода.", "Приватность", RegistryHive.CurrentUser, @"Software\Microsoft\InputPersonalization", "RestrictImplicitInkCollection", 1, 0);
-        RegTweak("app_diagnostics", "Запретить программам доступ к диагностике", "Ограничивает фоновый доступ сторонних программ к журналу диагностики.", "Приватность", RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\AppPrivacy", "LetAppsGetDiagnosticInfo", 2, 0);
-        RegTweak("location_tracking", "Отключить службы геолокации", "Блокирует встроенные датчики местоположения.", "Приватность", RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors", "DisableLocation", 1, 0);
+        RegTweak("typing_telemetry", "Отключить сбор данных клавиатуры", "Блокирует отправку шаблонов рукописного и экранного ввода.", "Приватность", RegistryHive.CurrentUser, @"Software\Microsoft\InputPersonalization", "RestrictImplicitInkCollection", 1, 0);
+        RegTweak("app_diagnostics", "Запретить приложениям сбор диагностики", "Ограничивает фоновый доступ сторонних программ к журналу диагностики.", "Приватность", RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\AppPrivacy", "LetAppsGetDiagnosticInfo", 2, 0);
+        RegTweak("location_tracking", "Отключить службы геолокации", "Блокирует встроенные системные датчики местоположения.", "Приватность", RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors", "DisableLocation", 1, 0);
+        RegTweak("bing_start_search", "Отключить поиск Bing в Пуске", "Убирает веб-страницы и рекламу из поисковой строки меню Пуск.", "Приватность", RegistryHive.CurrentUser, @"Software\Policies\Microsoft\Windows\Explorer", "DisableSearchBoxSuggestions", 1, 0, delKey: true, isFeatured: true);
+        RegTweak("web_search_disable", "Отключить веб-поиск Windows Search", "Поиск Windows ищет файлы только на локальном накопителе.", "Приватность", RegistryHive.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Search", "BingSearchEnabled", 0, 1);
+        RegTweak("lockscreen_spotlight", "Отключить рекламу на экране блокировки", "Убирает встроенные рекламные советы и ссылки на экране входа.", "Приватность", RegistryHive.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager", "RotatingLockScreenEnabled", 0, 1);
+        RegTweak("windows_consumer_features", "Запретить автоустановку промо-приложений", "Блокирует скрытую установку игр (Candy Crush, TikTok) после обновлений.", "Приватность", RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\CloudContent", "DisableWindowsConsumerFeatures", 1, 0, delKey: true);
+        RegTweak("tailored_experiences", "Отключить персонализацию диагностических данных", "Запрещает Microsoft предлагать рекламу на основе системных логов.", "Приватность", RegistryHive.CurrentUser, @"Software\Policies\Microsoft\Windows\CloudContent", "DisableTailoredExperiencesWithDiagnosticData", 1, 0, delKey: true);
+        RegTweak("feedback_notifications", "Отключить всплывающие опросы отчетов", "Windows больше не будет запрашивать обратную связь и оценки.", "Приватность", RegistryHive.CurrentUser, @"Software\Microsoft\Siuf\Rules", "NumberOfSIUFInPeriod", 0, 1, delKey: true);
+        RegTweak("edge_prelaunch", "Запретить фоновый предзапуск Microsoft Edge", "Предотвращает предварительную загрузку Edge в память при старте ОС.", "Приватность", RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\MicrosoftEdge\Main", "AllowPrelaunch", 0, 1, delKey: true);
+        RegTweak("ceip_telemetry", "Отключить программу улучшения ПО (CEIP)", "Блокирует службу сбора отзывов о работе программ Windows.", "Приватность", RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\SQMClient\Windows", "CEIPEnable", 0, 1, delKey: true);
+        RegTweak("clipboard_cloud_sync", "Запретить отправку буфера обмена в облако", "Отключает передачу скопированных паролей и текста на сервера учетной записи.", "Приватность", RegistryHive.CurrentUser, @"Software\Microsoft\Clipboard", "AllowCrossDeviceClipboard", 0, 1);
 
-        // === 2. ПРИВАТНОСТЬ (ADVANCED) ===
+        // Расширенные твики приватности
         RegTweak("uac_disable", "Отключить UAC (Контроль учетных записей)", "Полностью отключает затемнение экрана и предупреждения при запуске программ. Снижает базовую безопасность ОС.", "Приватность", RegistryHive.LocalMachine, @"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System", "EnableLUA", 0, 1, risk: RiskLevel.Advanced);
-        RegTweak("smartscreen_disable", "Отключить фильтр SmartScreen", "Отключает проверку запускаемых файлов в интернете. Ускоряет запуск софта, но отключает предупреждения.", "Приватность", RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\System", "EnableSmartScreen", 0, 1, risk: RiskLevel.Advanced);
+        RegTweak("smartscreen_disable", "Отключить фильтр SmartScreen", "Отключает проверку запускаемых файлов в интернете. Ускоряет запуск софта, но убирает предупреждения.", "Приватность", RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\System", "EnableSmartScreen", 0, 1, risk: RiskLevel.Advanced);
 
-        // === 3. ПРОИЗВОДИТЕЛЬНОСТЬ (SAFE) ===
+        // =========================================================================================
+        // 2. ПРОИЗВОДИТЕЛЬНОСТЬ И ИГРЫ (21 ТВIК)
+        // =========================================================================================
         RegTweak("anim_disable", "Отключить анимации окон", "Мгновенный отклик интерфейса без задержек при сворачивании окон.", "Производительность", RegistryHive.CurrentUser, @"Control Panel\Desktop\WindowMetrics", "MinAnimate", "0", "1", isFeatured: true);
-        RegTweak("system_responsiveness", "Максимальная отзывчивость системы", "Снимает скрытый 20% резерв тактов CPU для фоновых задач.", "Производительность", RegistryHive.LocalMachine, @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile", "SystemResponsiveness", 0, 20);
-        RegTweak("network_throttling", "Отключить сетевое дросселирование", "Устраняет задержку сетевого стека, снижая пинг в играх.", "Производительность", RegistryHive.LocalMachine, @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile", "NetworkThrottlingIndex", unchecked((int)0xFFFFFFFF), 10);
+        RegTweak("system_responsiveness", "Максимальная отзывчивость системы", "Снимает скрытый 20% резерв тактов CPU для фоновых задач.", "Производительность", RegistryHive.LocalMachine, @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile", "SystemResponsiveness", 0, 20, isFeatured: true);
+        RegTweak("network_throttling", "Отключить сетевое дросселирование", "Устраняет задержку сетевого стека, снижая пинг в играх.", "Производительность", RegistryHive.LocalMachine, @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile", "NetworkThrottlingIndex", unchecked((int)0xFFFFFFFF), 10, isFeatured: true);
         RegTweak("game_scheduler_priority", "Повысить приоритет GPU в играх", "Назначает играм максимальный приоритет планировщика графики.", "Производительность", RegistryHive.LocalMachine, @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games", "GPU Priority", 8, 8);
         RegTweak("gamedvr_disable", "Отключить Xbox Game DVR", "Выключает фоновый захват экрана в играх, устраняя статтеры.", "Производительность", RegistryHive.CurrentUser, @"System\GameConfigStore", "GameDVR_Enabled", 0, 1);
         RegTweak("game_bar_fts", "Отключить оверлей Game Bar", "Снимает оверлей Xbox и освобождает видеопамять.", "Производительность", RegistryHive.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\GameDVR", "AppCaptureEnabled", 0, 1);
         RegTweak("hags_gpu", "Аппаратное ускорение планирования GPU (HAGS)", "Снижает задержки графического конвейера видеокарты.", "Производительность", RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\GraphicsDrivers", "HwSchMode", 2, 1);
+        RegTweak("menu_show_delay", "Ускорить раскрытие меню (0 мс)", "Убирает задержку 400 мс при нажатии на контекстные меню и списки.", "Производительность", RegistryHive.CurrentUser, @"Control Panel\Desktop", "MenuShowDelay", "0", "400");
+        RegTweak("mouse_hover_time", "Мгновенный отклик при наведении мыши", "Снижает тайм-аут регистрации курсора над элементами с 400 до 10 мс.", "Производительность", RegistryHive.CurrentUser, @"Control Panel\Mouse", "MouseHoverTime", "10", "400");
+        RegTweak("auto_end_tasks", "Автоматически закрывать зависшие задачи", "При выключении ПК не ждет ручного подтверждения закрытия программ.", "Производительность", RegistryHive.CurrentUser, @"Control Panel\Desktop", "AutoEndTasks", "1", "0");
+        RegTweak("wait_to_kill", "Ускорить выключение ПК (WaitToKill = 2с)", "Сокращает время ожидания ответа от служб перед завершением работы.", "Производительность", RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control", "WaitToKillServiceTimeout", "2000", "5000");
+        RegTweak("hung_app_timeout", "Быстрое завершение сбойных программ", "Сокращает тайм-аут распознавания зависших окон до 1 сек.", "Производительность", RegistryHive.CurrentUser, @"Control Panel\Desktop", "HungAppTimeout", "1000", "5000");
+        RegTweak("transparency_disable", "Отключить эффекты прозрачности интерфейса", "Убирает эффекты размытия и акрила, разгружая видеопамять.", "Производительность", RegistryHive.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "EnableTransparency", 0, 1);
+        RegTweak("large_system_cache", "Включить большой системный файловый кэш", "Выделяет больше оперативной памяти под дисковый кэш чтения/записи.", "Производительность", RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management", "LargeSystemCache", 1, 0);
 
-        // === 4. ПРОИЗВОДИТЕЛЬНОСТЬ (ADVANCED) ===
+        // Сетевые твики в производительности
+        RegTweak("llmnr_disable", "Отключить протокол LLMNR", "Ускоряет разрешение локальных DNS-запросов и убирает лишний трафик.", "Производительность", RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows NT\DNSClient", "EnableMulticast", 0, 1, delKey: true);
+        RegTweak("netbios_disable", "Ограничить запросы NetBIOS over TCP", "Снижает сетевой оверхед и закрывает устаревшие порты NetBIOS.", "Производительность", RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Services\NetBT\Parameters", "NoNameReleaseOnDemand", 1, 0, risk: RiskLevel.Advanced);
+
+        // Экстремальные твики производительности
+        RegTweak("paging_executive", "Удерживать ядро Windows полностью в RAM", "Запрещает сброс исполняемых файлов ядра ОС в файл подкачки на диск.", "Производительность", RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management", "DisablePagingExecutive", 1, 0, risk: RiskLevel.Advanced);
+        RegTweak("power_throttling", "Отключить энергосберегающее троттлирование CPU", "Запрещает системе искусственно занижать тактовую частоту процессора для фоновых задач.", "Производительность", RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\Power\PowerThrottling", "PowerThrottlingOff", 1, 0, risk: RiskLevel.Advanced);
+        RegTweak("fse_fullscreen_optimizations", "Принудительный Fullscreen Mode в играх", "Устраняет задержку буферизации DWM в полноэкранных приложениях.", "Производительность", RegistryHive.CurrentUser, @"System\GameConfigStore", "GameDVR_FSEBehaviorMode", 2, 0, risk: RiskLevel.Advanced);
         RegTweak("vbs_disable", "Отключить VBS и Core Isolation", "Отключает изоляцию ядра. Дает чистый прирост FPS до 10% в играх, но ослабляет защиту ядра ОС.", "Производительность", RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\DeviceGuard", "EnableVirtualizationBasedSecurity", 0, 1, risk: RiskLevel.Advanced);
         RegTweak("ipv6_disable", "Отключить протокол IPv6", "Отключает IPv6 на уровне системы. Снижает задержки в ряде игр, но может затронуть сервисы Microsoft.", "Производительность", RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters", "DisabledComponents", 0xFF, 0x00, risk: RiskLevel.Advanced);
 
-        // === 5. СЛУЖБЫ (SAFE) ===
-        SrvTweak("service_diagtrack", "Отключить службу телеметрии (DiagTrack)", "Останавливает службу сбора и фоновой отправки телеметрии.", "DiagTrack", 2);
-        SrvTweak("service_sysmain", "Отключить службу SysMain (Superfetch)", "Отключает лишнее кэширование, снижая нагрузку на SSD и RAM.", "SysMain", 2, isFeatured: true);
+        // =========================================================================================
+        // 3. СЛУЖБЫ (18 ТВIКОВ)
+        // =========================================================================================
+        SrvTweak("service_diagtrack", "Отключить службу телеметрии (DiagTrack)", "Останавливает службу сбора и фоновой отправки телеметрии.", "DiagTrack", 2, isFeatured: true);
+        SrvTweak("service_sysmain", "Отключить службу SysMain (Superfetch)", "Отключает лишнее кэширование, снижая постоянную нагрузку на SSD и RAM.", "SysMain", 2, isFeatured: true);
         SrvTweak("service_wsearch", "Отключить поиск Windows Search", "Останавливает непрерывную фоновую индексацию накопителей.", "WSearch", 2);
-        SrvTweak("service_wersvc", "Отключить службу регистрации ошибок (WerSvc)", "Блокирует сбор дампов и отправку отчетов о сбоях в Microsoft.", "WerSvc", 3);
-        SrvTweak("service_remotereg", "Отключить службу удаленного реестра (RemoteRegistry)", "Блокирует удаленный сетевой доступ к системному реестру.", "RemoteRegistry", 4);
+        SrvTweak("service_wersvc", "Отключить регистрацию ошибок (WerSvc)", "Блокирует сбор дампов и отправку отчетов о сбоях в Microsoft.", "WerSvc", 3);
+        SrvTweak("service_remotereg", "Отключить службу удаленного реестра", "Блокирует удаленный сетевой доступ к системному реестру.", "RemoteRegistry", 4);
+        SrvTweak("service_spooler", "Отключить диспетчер печати (Spooler)", "Если у вас нет принтера, служба не нужна и только занимает память.", "Spooler", 2);
+        SrvTweak("service_fax", "Отключить службу факса (Fax)", "Служба факсимильной связи полностью бесполезна на современных ПК.", "Fax", 3);
+        SrvTweak("service_dmwappush", "Отключить WAP-маршрутизацию телеметрии", "Блокирует фоновую службу доставки push-сообщений телеметрии.", "dmwappushservice", 3);
+        SrvTweak("service_touch_keyboard", "Отключить службу сенсорной клавиатуры", "Служба ввода TabletInputService не нужна для обычных ПК и мышей.", "TabletInputService", 3);
+        SrvTweak("service_sensor", "Отключить службу системных датчиков", "Датчики освещения и поворота экрана (SensrSvc) не требуются десктопам.", "SensrSvc", 3);
+        SrvTweak("service_retaildemo", "Отключить службу демонстрации RetailDemo", "Фоновый компонент демонстрации Windows в торговых сетях.", "RetailDemo", 3);
+        SrvTweak("service_alljoyn", "Отключить маршрутизатор AllJoyn Router", "Служба маршрутизации умных IoT устройств AllJoyn.", "AJRouter", 3);
+        SrvTweak("service_mapsbroker", "Отключить диспетчер офлайн-карт", "Отключает фоновую синхронизацию системных карт MapsBroker.", "MapsBroker", 2);
 
-        // === 6. СЛУЖБЫ (EXPERIMENTAL) ===
-        RegTweak("defender_disable", "Отключить Windows Defender", "Блокирует встроенный защитник. ВНИМАНИЕ: Требует отключения 'Защиты от подделки' в настройках безопасности Windows!", "Службы", RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows Defender", "DisableAntiSpyware", 1, 0, risk: RiskLevel.Experimental);
+        // Продвинутые и опасные службы
+        SrvTweak("service_xblauth", "Отключить диспетчер аутентификации Xbox Live", "Останавливает сервис авторизации игр Xbox (если играете только в Steam/Epic).", "XblAuthManager", 3, risk: RiskLevel.Advanced);
+        SrvTweak("service_biometrics", "Отключить биометрическую службу (Windows Hello)", "Служба сканирования отпечатков пальцев и распознавания лиц.", "WbioSrvc", 3, risk: RiskLevel.Advanced);
+        RegTweak("defender_disable", "Отключить Windows Defender", "Блокирует встроенный защитник. ВНИМАНИЕ: Требует ручного отключения 'Защиты от подделки' в настройках безопасности!", "Службы", RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows Defender", "DisableAntiSpyware", 1, 0, risk: RiskLevel.Experimental);
         SrvTweak("service_wuauserv", "Остановить Центр Обновлений Windows", "Блокирует службу апдейтов (wuauserv). Вы перестанете получать системные патчи безопасности.", "wuauserv", 3, risk: RiskLevel.Experimental);
+        SrvTweak("service_waasmedic", "Остановить службу WaaSMedicSvc", "Блокирует встроенного агента автоматического восстановления Windows Update.", "WaaSMedicSvc", 3, risk: RiskLevel.Experimental);
 
-        // === 7. ИНТЕРФЕЙС И ОБНОВЛЕНИЯ (SAFE) ===
+        // =========================================================================================
+        // 4. ИНТЕРФЕЙС И ПРОВОДНИК (11 ТВIКОВ)
+        // =========================================================================================
         RegTweak("classic_context_menu", "Классическое контекстное меню (Win 10)", "Возвращает классическое меню без кнопки «Показать дополнительные параметры».", "Интерфейс", RegistryHive.CurrentUser, @"Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32", "", "", "", delKey: true, isFeatured: true);
-        RegTweak("show_file_extensions", "Показывать расширения файлов", "Отображает реальные расширения файлов (.exe, .zip, .txt).", "Интерфейс", RegistryHive.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "HideFileExt", 0, 1);
+        RegTweak("show_file_extensions", "Показывать расширения файлов", "Отображает реальные расширения файлов (.exe, .zip, .txt).", "Интерфейс", RegistryHive.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "HideFileExt", 0, 1, isFeatured: true);
         RegTweak("this_pc_default", "Открывать «Этот компьютер» в Проводнике", "Вместо стартового экрана «Главная» или «Быстрый доступ».", "Интерфейс", RegistryHive.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "LaunchTo", 1, 2);
-        RegTweak("disable_driver_updates", "Запретить замену драйверов через WU", "Предотвращает автоматическую замену ваших драйверов GPU более старыми версиями от Microsoft.", "Обновления", RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate", "ExcludeWUDriversInQualityUpdate", 1, 0, delKey: true);
+        RegTweak("taskbar_seconds", "Отображать секунды в часах панели задач", "Выводит точное системное время с секундами в трее Windows 11.", "Интерфейс", RegistryHive.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "ShowSecondsInSystemClock", 1, 0);
+        RegTweak("taskbar_widgets", "Скрыть виджеты с панели задач", "Убирает кнопку погоды и новостей «Виджеты» в левом углу панели задач.", "Интерфейс", RegistryHive.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "TaskbarDa", 0, 1);
+        RegTweak("taskbar_chat", "Скрыть значок «Чат» (Microsoft Teams)", "Убирает ненужную системную кнопку чата с панели задач.", "Интерфейс", RegistryHive.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "TaskbarMn", 0, 1);
+        RegTweak("explorer_compact_mode", "Компактный режим папок в Проводнике", "Уменьшает отступы между строками файлов для отображения большего списка.", "Интерфейс", RegistryHive.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "UseCompactMode", 1, 0);
+        RegTweak("show_hidden_files", "Показывать скрытые файлы и папки", "Делает видимыми скрытые системные папки (AppData, ProgramData).", "Интерфейс", RegistryHive.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "Hidden", 1, 2);
+        RegTweak("sticky_keys_disable", "Отключить залипание клавиш (Shift 5 раз)", "Предотвращает сворачивание игр при частом нажатии клавиши Shift.", "Интерфейс", RegistryHive.CurrentUser, @"Control Panel\Accessibility\StickyKeys", "Flags", "506", "510");
+        RegTweak("filter_keys_disable", "Отключить фильтрацию ввода клавиш", "Устраняет задержки отклика клавиатуры при длительном удержании.", "Интерфейс", RegistryHive.CurrentUser, @"Control Panel\Accessibility\Keyboard Response", "Flags", "122", "126");
+        RegTweak("snap_assist_flyout", "Отключить подсказки макетов Snap Assist", "Убирает всплывающие подсказки компоновки окон при наведении на крестик.", "Интерфейс", RegistryHive.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "SnapAssist", 0, 1);
+
+        // =========================================================================================
+        // 5. ОБНОВЛЕНИЯ WINDOWS (5 ТВIКОВ)
+        // =========================================================================================
+        RegTweak("disable_driver_updates", "Запретить замену драйверов через WU", "Предотвращает автоматическую замену ваших драйверов GPU более старыми версиями от Microsoft.", "Обновления", RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate", "ExcludeWUDriversInQualityUpdate", 1, 0, delKey: true, isFeatured: true);
+        RegTweak("delivery_opt_p2p", "Запретить P2P раздачу обновлений (Delivery)", "Windows больше не будет отдавать скачанные обновления другим ПК через интернет.", "Обновления", RegistryHive.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\DeliveryOptimization", "SystemSettingsDownloadMode", 0, 1);
+        RegTweak("no_auto_reboot_users", "Запретить перезагрузку ПК при работе пользователя", "Блокирует принудительный рестарт после апдейтов, пока в системе есть активный пользователь.", "Обновления", RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU", "NoAutoRebootWithLoggedOnUsers", 1, 0, delKey: true);
+        RegTweak("disable_speech_model_updates", "Отключить автообновление голосовых моделей", "Запрещает загрузку языковых пакетов распознавания речи в фоновом режиме.", "Обновления", RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Speech", "AllowSpeechModelUpdate", 0, 1, delKey: true);
+        RegTweak("disable_auto_update_download", "Только уведомлять о наличии обновлений", "Запрещает автоматическую загрузку тяжелых апдейтов без вашего согласия.", "Обновления", RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU", "AUOptions", 2, 0, delKey: true);
     }
 }
