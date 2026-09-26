@@ -75,7 +75,6 @@ public class DiskItemModel : ObservableObject
         }
     }
 
-    // Псевдоним для совместимости со сканером и кэшем
     public int Level
     {
         get => RingLevel;

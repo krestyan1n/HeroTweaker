@@ -52,6 +52,31 @@ public class MainViewModel : ObservableObject
     private CancellationTokenSource? _diskScanCts;
     private DispatcherTimer? _telemetryTimer;
 
+    // === ОБНОВЛЕНИЯ GITHUB ===
+    private bool _hasUpdateAvailable;
+    public bool HasUpdateAvailable
+    {
+        get => _hasUpdateAvailable;
+        set => SetField(ref _hasUpdateAvailable, value);
+    }
+
+    private string _latestVersionTag = string.Empty;
+    public string LatestVersionTag
+    {
+        get => _latestVersionTag;
+        set => SetField(ref _latestVersionTag, value);
+    }
+
+    private string _releaseUrl = string.Empty;
+    public string ReleaseUrl
+    {
+        get => _releaseUrl;
+        set => SetField(ref _releaseUrl, value);
+    }
+
+    public ICommand OpenUpdateUrlCommand { get; }
+    public ICommand DismissUpdateCommand { get; }
+
     // === СОСТОЯНИЕ ЗАГРУЗКИ (SPLASH SCREEN) ===
     private bool _isAppLoading = true;
     public bool IsAppLoading { get => _isAppLoading; set => SetField(ref _isAppLoading, value); }
@@ -465,6 +490,9 @@ public class MainViewModel : ObservableObject
 
     public MainViewModel()
     {
+        OpenUpdateUrlCommand = new RelayCommand(() => UpdateCheckerService.OpenReleaseUrl(ReleaseUrl));
+        DismissUpdateCommand = new RelayCommand(() => HasUpdateAvailable = false);
+
         FilteredTweaks = CollectionViewSource.GetDefaultView(_allTweaks);
         FilteredTweaks.Filter = obj =>
         {
@@ -1405,13 +1433,27 @@ public class MainViewModel : ObservableObject
         try
         {
             SplashStatus = "Инициализация модулей...";
-            SplashProgress = 20;
-            await Task.Delay(120);
+            SplashProgress = 15;
+            await Task.Delay(100);
 
             SysInfo = await SystemInfoService.GetSystemInfoAsync();
-            SplashProgress = 60;
-            await Task.Delay(120);
+            SplashProgress = 40;
 
+            // ПРОВЕРКА ОБНОВЛЕНИЙ НА GITHUB
+            SplashStatus = "Поиск обновлений HeroTweaker...";
+            var updateResult = await UpdateCheckerService.CheckForUpdatesAsync();
+            SplashProgress = 65;
+
+            if (updateResult.HasUpdate)
+            {
+                HasUpdateAvailable = true;
+                LatestVersionTag = updateResult.LatestTag;
+                ReleaseUrl = updateResult.ReleaseUrl;
+                SplashStatus = $"Найдено обновление {updateResult.LatestTag}!";
+                await Task.Delay(300);
+            }
+
+            SplashStatus = "Загрузка конфигурации твиков...";
             await Task.Run(() =>
             {
                 foreach (var t in _allTweaks) t.RefreshState();
@@ -1588,7 +1630,6 @@ public class MainViewModel : ObservableObject
             return r;
         };
 
-        // Автогенерация технической сводки для профи, если не передана вручную
         string hiveStr = hive == RegistryHive.LocalMachine ? "HKLM" : "HKCU";
         string targetValStr = delKey ? "(Удаление ключа/значения)" : $"{valName} = {targetVal} (DWORD/SZ)";
         string techFull = $"{hiveStr}\\{path}\nПараметр: {targetValStr}\n{techWhy}".Trim();
@@ -1678,9 +1719,7 @@ public class MainViewModel : ObservableObject
 
     private void RegisterTweaks()
     {
-        // =========================================================================================
         // 1. ПРИВАТНОСТЬ
-        // =========================================================================================
         RegTweak("telemetry_disable", "Отключить телеметрию Windows", "Ограничивает сбор данных диагностических служб Microsoft.", "Приватность",
             RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\DataCollection", "AllowTelemetry", 0, 1,
             isFeatured: true,
@@ -1778,9 +1817,7 @@ public class MainViewModel : ObservableObject
             userWhy: "Убирает синее предупреждающее окно при первом запуске скачанных exe-файлов и устраняет задержку запуска программ без цифровой подписи.",
             techWhy: "EnableSmartScreen = 0. Отключает отправку хешей исполняемых файлов (SHA-256) в сервис SmartScreen Reputation Service.");
 
-        // =========================================================================================
         // 2. ПРОИЗВОДИТЕЛЬНОСТЬ И ИГРЫ
-        // =========================================================================================
         RegTweak("anim_disable", "Отключить анимации окон", "Мгновенный отклик интерфейса без задержек при сворачивании окон.", "Производительность",
             RegistryHive.CurrentUser, @"Control Panel\Desktop\WindowMetrics", "MinAnimate", "0", "1",
             isFeatured: true,
@@ -1899,9 +1936,7 @@ public class MainViewModel : ObservableObject
             userWhy: "Устраняет задержки двойного опроса DNS (IPv4/IPv6) у провайдеров, которые не поддерживают нативно IPv6.",
             techWhy: "DisabledComponents = 0xFF. Полностью отключает биндинги сетевого стека Tcpip6.sys для всех физических адаптеров.");
 
-        // =========================================================================================
         // 3. СЛУЖБЫ
-        // =========================================================================================
         SrvTweak("service_diagtrack", "Отключить службу телеметрии (DiagTrack)", "Останавливает службу сбора и фоновой отправки телеметрии.", "DiagTrack", 2,
             isFeatured: true,
             userWhy: "Служба сбора данных телеметрии перестает нагружать процессор и накопитель в фоновом режиме.",
@@ -1982,9 +2017,7 @@ public class MainViewModel : ObservableObject
             userWhy: "Не дает операционной системе самостоятельно снова включить службу обновлений Windows в обход ваших настроек.",
             techWhy: "WaaSMedicSvc (Windows Remediation Service). Встроенный компонент самовосстановления поврежденных файлов и служб апдейтов.");
 
-        // =========================================================================================
         // 4. ИНТЕРФЕЙС И ПРОВОДНИК
-        // =========================================================================================
         RegTweak("classic_context_menu", "Классическое меню (Windows 10)", "Возвращает классическое меню без кнопки «Показать дополнительные параметры».", "Интерфейс",
             RegistryHive.CurrentUser, @"Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32", "", "", "",
             delKey: true,
@@ -2051,9 +2084,7 @@ public class MainViewModel : ObservableObject
             userWhy: "При наведении мыши на кнопку развертывания окна больше не выскакивает назойливая панель макетов экранов.",
             techWhy: "SnapAssist = 0. Отключает появление оверлея Win32 Flyout подсказок компоновщика Snap Layouts в Проводнике.");
 
-        // =========================================================================================
         // 5. ОБНОВЛЕНИЯ WINDOWS
-        // =========================================================================================
         RegTweak("disable_driver_updates", "Запретить замену драйверов через WU", "Предотвращает автоматическую замену ваших драйверов GPU более старыми версиями от Microsoft.", "Обновления",
             RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate", "ExcludeWUDriversInQualityUpdate", 1, 0, delKey: true,
             isFeatured: true,
