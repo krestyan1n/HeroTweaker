@@ -111,7 +111,7 @@ public class MainViewModel : ObservableObject
         "Приложения" => "Пакетный менеджер Winget и каталог популярного ПО",
         "Developer" => "Диагностика SDK, компиляторов и переменных PATH",
         "Автозагрузка" => "Контроль фоновых программ и ускорение загрузки системы",
-        "Сеть & Пинг" => "Выбор адаптера, DNS бенчмарк и оптимизация игрового пинга",
+        "Сеть & Пинг" => "Выбор адаптера, сетевой реаниматор, DNS бенчмарк и пинг",
         "Настройки" => "Персонализация интерфейса, цветовые темы и кэш",
         _ => "Управление и оптимизация параметров операционной системы"
     };
@@ -488,6 +488,13 @@ public class MainViewModel : ObservableObject
     public ICommand ToggleNagleCommand { get; }
     public ICommand RefreshAdaptersCommand { get; }
 
+    // Сетевой реаниматор
+    public ICommand RescanPnpDevicesCommand { get; }
+    public ICommand InstallDriverFromFolderCommand { get; }
+    public ICommand HardResetNetworkStackCommand { get; }
+    public ICommand InstallLoopbackAdapterCommand { get; }
+    public ICommand ShowRndisHelpCommand { get; }
+
     public MainViewModel()
     {
         OpenUpdateUrlCommand = new RelayCommand(() => UpdateCheckerService.OpenReleaseUrl(ReleaseUrl));
@@ -657,6 +664,85 @@ public class MainViewModel : ObservableObject
                 IsGlobalBusy = false;
                 StatusMessage = string.Empty;
             }
+        });
+
+        // Сетевой реаниматор (Команды)
+        RescanPnpDevicesCommand = new RelayCommand(async () =>
+        {
+            IsGlobalBusy = true;
+            StatusMessage = "Сканирование оборудования (PnP Rescan)...";
+            try
+            {
+                var (ok, outMsg) = await NetworkRescueService.RescanPnpDevicesAsync();
+                RefreshNetworkAdapters();
+                MessageBox.Show($"Сканирование шины оборудования завершено.\n\n{outMsg}", "PnP Scan", MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
+            }
+            finally { IsGlobalBusy = false; StatusMessage = string.Empty; }
+        });
+
+        InstallDriverFromFolderCommand = new RelayCommand(async () =>
+        {
+            var dlg = new OpenFolderDialog { Title = "Выберите папку с распакованными INF-драйверами" };
+            if (dlg.ShowDialog() == true)
+            {
+                IsGlobalBusy = true;
+                StatusMessage = "Пакетная интеграция драйверов через PnPUtil...";
+                try
+                {
+                    var (ok, outMsg) = await NetworkRescueService.InstallDriversFromFolderAsync(dlg.FolderName);
+                    RefreshNetworkAdapters();
+                    MessageBox.Show(outMsg, "Инсталляция драйверов", MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
+                }
+                finally { IsGlobalBusy = false; StatusMessage = string.Empty; }
+            }
+        });
+
+        HardResetNetworkStackCommand = new RelayCommand(async () =>
+        {
+            var res = MessageBox.Show(
+                "Выполнить полный сброс и переустановку всех сетевых карт и протоколов (netcfg -d)?\n\n" +
+                "После выполнения потребуется обязательная перезагрузка компьютера.",
+                "Жесткий сброс адаптеров",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (res == MessageBoxResult.Yes)
+            {
+                IsGlobalBusy = true;
+                StatusMessage = "Выполнение жесткого сброса сетевого стека...";
+                try
+                {
+                    var (ok, outMsg) = await NetworkRescueService.HardResetNetworkStackAsync();
+                    MessageBox.Show($"{outMsg}\n\nПожалуйста, перезагрузите систему.", "Сброс завершен", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                finally { IsGlobalBusy = false; StatusMessage = string.Empty; }
+            }
+        });
+
+        InstallLoopbackAdapterCommand = new RelayCommand(async () =>
+        {
+            IsGlobalBusy = true;
+            StatusMessage = "Развертывание Microsoft KM-TEST Loopback Adapter...";
+            try
+            {
+                var (ok, outMsg) = await NetworkRescueService.InstallEmergencyLoopbackAdapterAsync();
+                RefreshNetworkAdapters();
+                MessageBox.Show(outMsg, "Loopback Adapter", MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
+            }
+            finally { IsGlobalBusy = false; StatusMessage = string.Empty; }
+        });
+
+        ShowRndisHelpCommand = new RelayCommand(() =>
+        {
+            MessageBox.Show(
+                "ЭКСТРЕННЫЙ ИНТЕРНЕТ ЧЕРЕЗ СМАРТФОН (RNDIS):\n\n" +
+                "1. Подключите телефон к компьютеру по обычному USB-кабелю.\n" +
+                "2. В настройках телефона включите «Точка доступа» ➔ «USB-модем» (USB Tethering).\n" +
+                "3. Драйвер RNDIS (usb8023.sys) встроен во ВСЕ версии Windows по умолчанию и не требует интернета.\n" +
+                "4. Сеть появится за 3 секунды, после чего HeroTweaker или Windows Update смогут загрузить родные драйверы материнской платы.",
+                "Мастер аварийного интернета",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
         });
 
         CleanMemoryCommand = new RelayCommand(async () =>
@@ -1719,7 +1805,9 @@ public class MainViewModel : ObservableObject
 
     private void RegisterTweaks()
     {
+        // =========================================================================================
         // 1. ПРИВАТНОСТЬ
+        // =========================================================================================
         RegTweak("telemetry_disable", "Отключить телеметрию Windows", "Ограничивает сбор данных диагностических служб Microsoft.", "Приватность",
             RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\DataCollection", "AllowTelemetry", 0, 1,
             isFeatured: true,
@@ -1817,7 +1905,9 @@ public class MainViewModel : ObservableObject
             userWhy: "Убирает синее предупреждающее окно при первом запуске скачанных exe-файлов и устраняет задержку запуска программ без цифровой подписи.",
             techWhy: "EnableSmartScreen = 0. Отключает отправку хешей исполняемых файлов (SHA-256) в сервис SmartScreen Reputation Service.");
 
+        // =========================================================================================
         // 2. ПРОИЗВОДИТЕЛЬНОСТЬ И ИГРЫ
+        // =========================================================================================
         RegTweak("anim_disable", "Отключить анимации окон", "Мгновенный отклик интерфейса без задержек при сворачивании окон.", "Производительность",
             RegistryHive.CurrentUser, @"Control Panel\Desktop\WindowMetrics", "MinAnimate", "0", "1",
             isFeatured: true,
@@ -1936,7 +2026,39 @@ public class MainViewModel : ObservableObject
             userWhy: "Устраняет задержки двойного опроса DNS (IPv4/IPv6) у провайдеров, которые не поддерживают нативно IPv6.",
             techWhy: "DisabledComponents = 0xFF. Полностью отключает биндинги сетевого стека Tcpip6.sys для всех физических адаптеров.");
 
+        // Новые твики ядра, памяти и таймеров
+        RegTweak("ntfs_disable_last_access", "Отключить запись времени доступа NTFS", "Устраняет постоянную перезапись метаданных файлов при каждом чтении с диска.", "Производительность",
+            RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\FileSystem", "NtfsDisableLastAccessUpdate", 1, 0,
+            isFeatured: true,
+            userWhy: "Каждый раз, когда Windows или игра открывает файл, система больше не тратит ресурсы на запись на диск отметки времени 'Когда файл был прочитан'. Увеличивает ресурс SSD и отзывчивость дисковой подсистемы.",
+            techWhy: "FileSystem: NtfsDisableLastAccessUpdate = 1 (DWORD). Отключает обновление временных меток $STANDARD_INFORMATION в файловой записи MFT при операциях IRP_MJ_READ.");
+
+        RegTweak("ntfs_disable_8dot3", "Отключить генерацию имен 8.3 (MS-DOS)", "Ускоряет создание и поиск файлов в папках с десятками тысяч файлов.", "Производительность",
+            RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\FileSystem", "NtfsDisable8dot3NameCreation", 1, 0,
+            userWhy: "Windows перестает создавать для каждого файла устаревшие укороченные дубликаты имен времен DOS (например, PROGRA~1). Значительно ускоряет работу с тяжелыми каталогами и кэшами программ.",
+            techWhy: "FileSystem: NtfsDisable8dot3NameCreation = 1. Исключает коллизии хэшей коротких имен в директориях и снижает нагрузку на драйвер Ntfs.sys.");
+
+        RegTweak("disable_dynamic_ticks", "Отключить Dynamic Ticking таймера CPU", "Стабилизирует интервалы системных прерываний, снижая разброс кадровой задержки (frametime).", "Производительность",
+            RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\Session Manager\kernel", "DisableDynamicTick", 1, 0,
+            risk: RiskLevel.Advanced,
+            userWhy: "Устраняет плавающие микростаттеры в играх, запрещая процессору произвольно объединять такты системного таймера для энергосбережения.",
+            techWhy: "DisableDynamicTick = 1 (эквивалент bcdedit /set disabledynamictick yes). Обеспечивает строгую периодичность системного тика APIC таймера.",
+            rebootReq: "Требуется перезагрузка ПК");
+
+        RegTweak("disable_hibernation", "Отключить гибернацию (Файл hiberfil.sys)", "Удаляет скрытый системный файл hiberfil.sys, мгновенно освобождая от 8 до 64 ГБ на диске C:.", "Диск",
+            RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\Power", "HibernateEnabled", 0, 1,
+            isFeatured: true,
+            userWhy: "Если вы не пользуетесь режимом 'Гибернация', отключение мгновенно освобождает на системном диске гигабайты памяти, равные объему вашей оперативной памяти.",
+            techWhy: "HibernateEnabled = 0 (эквивалент powercfg -h off). Удаляет файл сброса состояния ядра C:\\hiberfil.sys и выключает гибридный спящий режим Fast Startup.");
+
+        RegTweak("disable_mmcss_audio_throttling", "Снять ограничение тактов аудиопотока", "Устраняет хрипы звука и рассинхрон при пиковых нагрузках на CPU.", "Производительность",
+            RegistryHive.LocalMachine, @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Audio", "Background Only", "False", "True",
+            userWhy: "Звук в Discord, играх и наушниках не будет заикаться или трещать, когда процессор нагружен на 100% тяжелой игрой или компиляцией.",
+            techWhy: "Tasks\\Audio: Background Only = 'False', Scheduling Category = 'High'. Гарантирует повышенный приоритет потокам аудио-движка WASAPI в планировщике.");
+
+        // =========================================================================================
         // 3. СЛУЖБЫ
+        // =========================================================================================
         SrvTweak("service_diagtrack", "Отключить службу телеметрии (DiagTrack)", "Останавливает службу сбора и фоновой отправки телеметрии.", "DiagTrack", 2,
             isFeatured: true,
             userWhy: "Служба сбора данных телеметрии перестает нагружать процессор и накопитель в фоновом режиме.",
@@ -2017,7 +2139,14 @@ public class MainViewModel : ObservableObject
             userWhy: "Не дает операционной системе самостоятельно снова включить службу обновлений Windows в обход ваших настроек.",
             techWhy: "WaaSMedicSvc (Windows Remediation Service). Встроенный компонент самовосстановления поврежденных файлов и служб апдейтов.");
 
+        RegTweak("disable_delivery_optimization_service", "Полностью отключить службу Delivery Optimization", "Запрещает использование интернет-канала для скрытой раздачи обновлений.", "Службы",
+            RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Services\DoSvc", "Start", 4, 2,
+            userWhy: "Служба DoSvc больше не сможет нагружать процессор и забивать интернет-канал незаметной фоновой P2P-раздачей системных файлов другим компьютерам.",
+            techWhy: "Служба Win32: DoSvc (Delivery Optimization). Полный перевод в Disabled (Start=4). Исключает захват порта 7680 TCP.");
+
+        // =========================================================================================
         // 4. ИНТЕРФЕЙС И ПРОВОДНИК
+        // =========================================================================================
         RegTweak("classic_context_menu", "Классическое меню (Windows 10)", "Возвращает классическое меню без кнопки «Показать дополнительные параметры».", "Интерфейс",
             RegistryHive.CurrentUser, @"Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32", "", "", "",
             delKey: true,
@@ -2084,7 +2213,9 @@ public class MainViewModel : ObservableObject
             userWhy: "При наведении мыши на кнопку развертывания окна больше не выскакивает назойливая панель макетов экранов.",
             techWhy: "SnapAssist = 0. Отключает появление оверлея Win32 Flyout подсказок компоновщика Snap Layouts в Проводнике.");
 
+        // =========================================================================================
         // 5. ОБНОВЛЕНИЯ WINDOWS
+        // =========================================================================================
         RegTweak("disable_driver_updates", "Запретить замену драйверов через WU", "Предотвращает автоматическую замену ваших драйверов GPU более старыми версиями от Microsoft.", "Обновления",
             RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate", "ExcludeWUDriversInQualityUpdate", 1, 0, delKey: true,
             isFeatured: true,
@@ -2110,5 +2241,48 @@ public class MainViewModel : ObservableObject
             RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU", "AUOptions", 2, 0, delKey: true,
             userWhy: "Windows Update найдет обновление, но не начнет скачивать его втихаря, забивая ваш интернет-канал. Вы сами решаете, когда нажать 'Скачать'.",
             techWhy: "AUOptions = 2 (Notify for download and notify for install). Переводит режим работы агента автоматических обновлений в ручной режим оповещения.");
+        // =========================================================================================
+        // 6. ДОПОЛНИТЕЛЬНЫЕ ТВIКИ: СКОРОСТЬ ФАЙЛОВОЙ СИСТЕМЫ, ПАМЯТЬ И ТАЙМЕРЫ ЯДРА
+        // =========================================================================================
+
+        // Отключение записи времени последнего доступа NTFS
+        RegTweak("ntfs_disable_last_access", "Отключить запись времени доступа NTFS", "Устраняет постоянную перезапись метаданных файлов при каждом чтении с диска.", "Производительность",
+            RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\FileSystem", "NtfsDisableLastAccessUpdate", 1, 0,
+            isFeatured: true,
+            userWhy: "Каждый раз, когда Windows или игра открывает файл, система больше не тратит ресурсы на запись на диск отметки времени 'Когда файл был прочитан'. Увеличивает ресурс SSD и отзывчивость дисковой подсистемы.",
+            techWhy: "FileSystem: NtfsDisableLastAccessUpdate = 1 (DWORD). Отключает обновление временных меток $STANDARD_INFORMATION в файловой записи MFT при операциях IRP_MJ_READ.");
+
+        // Отключение генерации коротких имен 8.3 (MS-DOS)
+        RegTweak("ntfs_disable_8dot3", "Отключить генерацию имен 8.3 (MS-DOS)", "Ускоряет создание и поиск файлов в папках с десятками тысяч файлов.", "Производительность",
+            RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\FileSystem", "NtfsDisable8dot3NameCreation", 1, 0,
+            userWhy: "Windows перестает создавать для каждого файла устаревшие укороченные дубликаты имен времен DOS (например, PROGRA~1). Значительно ускоряет работу с тяжелыми каталогами и кэшами программ.",
+            techWhy: "FileSystem: NtfsDisable8dot3NameCreation = 1. Исключает коллизии хэшей коротких имен в директориях и снижает нагрузку на драйвер Ntfs.sys.");
+
+        // Отключение динамических тиков таймера (Dynamic Ticking)
+        RegTweak("disable_dynamic_ticks", "Отключить Dynamic Ticking таймера CPU", "Стабилизирует интервалы системных прерываний, снижая разброс кадровой задержки (frametime).", "Производительность",
+            RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\Session Manager\kernel", "DisableDynamicTick", 1, 0,
+            risk: RiskLevel.Advanced,
+            userWhy: "Устраняет плавающие микростаттеры в играх, запрещая процессору произвольно объединять такты системного таймера для энергосбережения.",
+            techWhy: "DisableDynamicTick = 1 (эквивалент bcdedit /set disabledynamictick yes). Обеспечивает строгую периодичность системного тика APIC таймера.",
+            rebootReq: "Требуется перезагрузка ПК");
+
+        // Отключение режима гибернации (Освобождение диска = объему RAM)
+        RegTweak("disable_hibernation", "Отключить гибернацию (Файл hiberfil.sys)", "Удаляет скрытый системный файл hiberfil.sys, мгновенно освобождая от 8 до 64 ГБ на диске C:.", "Диск",
+            RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\Power", "HibernateEnabled", 0, 1,
+            isFeatured: true,
+            userWhy: "Если вы не пользуетесь режимом 'Гибернация', отключение мгновенно освобождает на системном диске гигабайты памяти, равные объему вашей оперативной памяти.",
+            techWhy: "HibernateEnabled = 0 (эквивалент powercfg -h off). Удаляет файл сброса состояния ядра C:\\hiberfil.sys и выключает гибридный спящий режим Fast Startup.");
+
+        // Отключение оптимизации доставки P2P для всех пользователей
+        RegTweak("disable_delivery_optimization_service", "Полностью отключить службу Delivery Optimization", "Запрещает использование интернет-канала для скрытой раздачи обновлений.", "Службы",
+            RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Services\DoSvc", "Start", 4, 2,
+            userWhy: "Служба DoSvc больше не сможет нагружать процессор и забивать интернет-канал незаметной фоновой P2P-раздачей системных файлов другим компьютерам.",
+            techWhy: "Служба Win32: DoSvc (Delivery Optimization). Полный перевод в Disabled (Start=4). Исключает захват порта 7680 TCP.");
+
+        // Принудительное отключение троттлинга аудиоподсистемы
+        RegTweak("disable_mmcss_audio_throttling", "Снять ограничение тактов аудиопотока", "Устраняет хрипы звука и рассинхрон при пиковых нагрузках на CPU.", "Производительность",
+            RegistryHive.LocalMachine, @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Audio", "Background Only", "False", "True",
+            userWhy: "Звук в Discord, играх и наушниках не будет заикаться или трещать, когда процессор нагружен на 100% тяжелой игрой или компиляцией.",
+            techWhy: "Tasks\\Audio: Background Only = 'False', Scheduling Category = 'High'. Гарантирует повышенный приоритет потокам аудио-движка WASAPI в планировщике.");
     }
 }

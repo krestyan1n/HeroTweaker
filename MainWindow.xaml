@@ -417,7 +417,7 @@
                     </Border>
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="HeroTweaker" FontSize="17" FontWeight="Black" Foreground="{DynamicResource TextPrimaryBrush}" />
-                        <TextBlock Text="v0.8.7.2 · BETA" FontSize="10" Foreground="{DynamicResource CyanAccentBrush}" FontWeight="Bold" Margin="0,2,0,0"/>
+                        <TextBlock Text="v0.8.7.3 · BETA" FontSize="10" Foreground="{DynamicResource CyanAccentBrush}" FontWeight="Bold" Margin="0,2,0,0"/>
                     </StackPanel>
                 </StackPanel>
 
@@ -1440,7 +1440,7 @@
                     </ScrollViewer>
                 </Grid>
 
-                <!-- 7. СЕТЬ & ПИНГ -->
+                <!-- 7. СЕТЬ & ПИНГ (С МОДУЛЕМ РЕАНИМАТОРА СЕТИ) -->
                 <Grid Visibility="{Binding IsNetworkVisible, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel>
@@ -1495,6 +1495,32 @@
                                         </Border>
                                     </Grid>
                                 </Grid>
+                            </Border>
+
+                            <!-- КАРТОЧКА: РЕАНИМАТОР СЕТИ & ДРАЙВЕРОВ (OFFLINE RESCUE KIT) -->
+                            <Border Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="18" Margin="0,0,0,14">
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,10">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="🚨 Реаниматор сети &amp; Драйверов" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource CyanAccentBrush}"/>
+                                            <Border Background="#20F87171" CornerRadius="4" Padding="6,1" Margin="8,0,0,0" VerticalAlignment="Center">
+                                                <TextBlock Text="OFFLINE RESCUE" FontSize="9.5" FontWeight="Bold" Foreground="#F87171"/>
+                                            </Border>
+                                        </StackPanel>
+                                    </Grid>
+                                    <TextBlock Text="Инструменты экстренной помощи, если после переустановки Windows отсутствует интернет, не распознается сетевая карта или повреждены системные сокеты." FontSize="11.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,14" TextWrapping="Wrap"/>
+
+                                    <UniformGrid Columns="3" Margin="0,0,0,8">
+                                        <Button Content="🔍 Рескан шины PnP" Command="{Binding RescanPnpDevicesCommand}" Style="{StaticResource DarkCardButtonStyle}" Margin="0,0,4,0" ToolTip="Принудительный аппаратный опрос шин PCI Express и USB"/>
+                                        <Button Content="📦 Установить INF из папки..." Command="{Binding InstallDriverFromFolderCommand}" Style="{StaticResource CyanActionButtonStyle}" Margin="2,0,2,0" ToolTip="Пакетная установка сетевых драйверов из любой папки или флешки"/>
+                                        <Button Content="🔄 Жесткий сброс адаптеров" Command="{Binding HardResetNetworkStackCommand}" Style="{StaticResource DarkCardButtonStyle}" Foreground="#F87171" Margin="4,0,0,0" ToolTip="Полная переустановка сетевых компонентов через netcfg -d"/>
+                                    </UniformGrid>
+
+                                    <UniformGrid Columns="2">
+                                        <Button Content="🔌 Установить Loopback адаптер" Command="{Binding InstallLoopbackAdapterCommand}" Style="{StaticResource DarkCardButtonStyle}" Margin="0,0,4,0" ToolTip="Развертывание встроенного системного адаптера Microsoft KM-TEST Loopback"/>
+                                        <Button Content="📱 Мастер USB-модема (RNDIS)" Command="{Binding ShowRndisHelpCommand}" Style="{StaticResource DarkCardButtonStyle}" Margin="4,0,0,0" ToolTip="Инструкция по экстренному подключению интернета через смартфон"/>
+                                    </UniformGrid>
+                                </StackPanel>
                             </Border>
 
                             <!-- Блок режима Ultra Low Latency (Nagle) -->
@@ -1763,7 +1789,7 @@
                                 <TextBlock Text="ℹ️ О ПРИЛОЖЕНИИ" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource CyanAccentBrush}" Margin="0,0,0,12"/>
                                 <Grid Margin="0,0,0,6">
                                     <TextBlock Text="Версия:" Foreground="{DynamicResource TextSecondaryBrush}"/>
-                                    <TextBlock Text="v0.8.7.2 · BETA" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Right"/>
+                                    <TextBlock Text="v0.8.7.3 · BETA" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" HorizontalAlignment="Right"/>
                                 </Grid>
                                 <Grid Margin="0,0,0,6">
                                     <TextBlock Text="Разработчик:" Foreground="{DynamicResource TextSecondaryBrush}"/>
@@ -1852,7 +1878,7 @@
                     <TextBlock Text="Hero" FontSize="28" FontWeight="Black" Foreground="{DynamicResource TextPrimaryBrush}" />
                     <TextBlock Text="Tweaker" FontSize="28" FontWeight="Light" Foreground="{DynamicResource CyanAccentBrush}" />
                 </StackPanel>
-                <TextBlock Text="Hero Engineering • v0.8.7.2 BETA" FontSize="11" Foreground="{DynamicResource CyanGlowBrush}" HorizontalAlignment="Center" Margin="0,0,0,24" FontWeight="SemiBold"/>
+                <TextBlock Text="Hero Engineering • v0.8.7.3 BETA" FontSize="11" Foreground="{DynamicResource CyanGlowBrush}" HorizontalAlignment="Center" Margin="0,0,0,24" FontWeight="SemiBold"/>
                 <ProgressBar Value="{Binding SplashProgress}" Maximum="100" Height="4" Background="#141C2E" Foreground="{DynamicResource CyanAccentBrush}" BorderThickness="0" Margin="0,0,0,10"/>
                 <TextBlock Text="{Binding SplashStatus}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center"/>
             </StackPanel>

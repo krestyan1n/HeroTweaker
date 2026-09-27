@@ -16,7 +16,7 @@ public static class UpdateCheckerService
     private const string RepoName = "HeroTweaker";
 
     // Текущая версия приложения
-    public const string CurrentVersion = "0.8.7.2";
+    public const string CurrentVersion = "0.8.7.3";
 
     private static readonly HttpClient HttpClient = new()
     {
