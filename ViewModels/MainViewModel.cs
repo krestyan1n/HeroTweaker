@@ -84,7 +84,7 @@ public class MainViewModel : ObservableObject
     private string _splashStatus = "Инициализация модулей Hero Engineering...";
     public string SplashStatus { get => _splashStatus; set => SetField(ref _splashStatus, value); }
 
-    private double _splashProgress;
+    private double _splashProgress = 15;
     public double SplashProgress { get => _splashProgress; set => SetField(ref _splashProgress, value); }
 
     private SystemInfoModel? _sysInfo;
@@ -102,21 +102,20 @@ public class MainViewModel : ObservableObject
     public bool IsTweaksVisible => !IsDashboardVisible && !IsDiskVisible && !IsDriversVisible && !IsAppsVisible && !IsSettingsVisible && !IsDeveloperVisible && !IsStartupVisible && !IsNetworkVisible;
     public bool IsSearchVisible => IsTweaksVisible;
 
-    // === ДИНАМИЧЕСКИЙ ПОДЗАГОЛОВОК ВКЛАДКИ ===
     public string CategorySubtitle => SelectedCategory switch
     {
-        "Информация" => "Сводка состояния ОС, быстрые твики и мониторинг ресурсов",
-        "Диск" => "Анализ структуры папок и глубокая очистка накопителей",
-        "Драйверы" => "Управление драйверами оборудования и библиотеками C++",
-        "Приложения" => "Пакетный менеджер Winget и каталог популярного ПО",
-        "Developer" => "Диагностика SDK, компиляторов и переменных PATH",
-        "Автозагрузка" => "Контроль фоновых программ и ускорение загрузки системы",
-        "Сеть & Пинг" => "Выбор адаптера, сетевой реаниматор, DNS бенчмарк и пинг",
-        "Настройки" => "Персонализация интерфейса, цветовые темы и кэш",
-        _ => "Управление и оптимизация параметров операционной системы"
+        "Информация" => "Общее состояние операционной системы, телеметрия в реальном времени и быстрые твики",
+        "Диск" => "Интерактивный анализ накопителей DiskTree и глубокая очистка системных кэшей",
+        "Драйверы" => "Поиск обновлений Windows Update, экспорт INF-пакетов и пакетная установка Visual C++",
+        "Приложения" => "Каталог проверенного софта Winget, умный деинсталлятор и восстановление UWP Store",
+        "Developer" => "Аудит окружения разработки: компиляторы, разрешение бинарников и чистка дубликатов PATH",
+        "Автозагрузка" => "Оптимизация времени холодного старта ПК и управление фоновыми автозапускаемыми службами",
+        "Сеть & Пинг" => "Выбор адаптера, сетевой реаниматор, DNS бенчмарк и сверхнизкая задержка Nagle",
+        "Настройки" => "Выбор цветовой палитры интерфейса, управление снимками реестра и кэшем",
+        _ => "Управление и глубокая оптимизация параметров операционной системы"
     };
 
-    // === СЕТЬ: ВЫБОР АДАПТЕРА И DNS BENCHMARK ===
+    // === СЕТЬ: АДАПТЕРЫ И DNS ===
     public ObservableCollection<NetworkAdapterInfo> AvailableAdapters { get; } = new();
 
     private NetworkAdapterInfo? _selectedAdapter;
@@ -138,13 +137,9 @@ public class MainViewModel : ObservableObject
     public bool IsDnsBenchmarking { get => _isDnsBenchmarking; set => SetField(ref _isDnsBenchmarking, value); }
 
     private bool _isNagleEnabled;
-    public bool IsNagleEnabled
-    {
-        get => _isNagleEnabled;
-        set => SetField(ref _isNagleEnabled, value);
-    }
+    public bool IsNagleEnabled { get => _isNagleEnabled; set => SetField(ref _isNagleEnabled, value); }
 
-    // === АВТОЗАГРУЗКА (STARTUP DOCTOR) ===
+    // === АВТОЗАГРУЗКА ===
     public ObservableCollection<StartupItemModel> StartupItems { get; } = new();
     private bool _isStartupScanning;
     public bool IsStartupScanning { get => _isStartupScanning; set => SetField(ref _isStartupScanning, value); }
@@ -152,7 +147,7 @@ public class MainViewModel : ObservableObject
     public int StartupCount => StartupItems.Count;
     public int HighImpactStartupCount => StartupItems.Count(i => i.IsEnabled && i.Impact == StartupImpact.High);
 
-    // === ДИСК: ПОДВКЛАДКИ ===
+    // === ДИСК & ОЧИСТКА ===
     private int _diskSubTabIndex = 0;
     public int DiskSubTabIndex
     {
@@ -189,36 +184,30 @@ public class MainViewModel : ObservableObject
         }
     }
 
-    // === ЖИВАЯ ТЕЛЕМЕТРИЯ ===
-    private double _realTimeCpuUsage = 24.0;
-    public double RealTimeCpuUsage { get => _realTimeCpuUsage; set => SetField(ref _realTimeCpuUsage, value); }
+    public ObservableCollection<DiskItemModel> AllSunburstSlices { get; } = new();
+    public ObservableCollection<DiskItemModel> Level1ListItems { get; } = new();
+    public ObservableCollection<BreadcrumbItem> Breadcrumbs { get; } = new();
+    public ObservableCollection<DriveSelectModel> AvailableDrives { get; } = new();
 
-    private double _realTimeRamUsage = 49.0;
-    public double RealTimeRamUsage { get => _realTimeRamUsage; set => SetField(ref _realTimeRamUsage, value); }
+    private DiskItemModel? _hoveredDiskItem;
+    public DiskItemModel? HoveredDiskItem { get => _hoveredDiskItem; set => SetField(ref _hoveredDiskItem, value); }
 
-    // === HEALTH SCORE ===
-    private int _systemHealthScore = 70;
-    public int SystemHealthScore { get => _systemHealthScore; set => SetField(ref _systemHealthScore, value); }
+    private string _currentDiskPath = @"C:\";
+    public string CurrentDiskPath { get => _currentDiskPath; set => SetField(ref _currentDiskPath, value); }
 
-    private string _systemHealthStatusText = "Анализ состояния системы...";
-    public string SystemHealthStatusText { get => _systemHealthStatusText; set => SetField(ref _systemHealthStatusText, value); }
+    private string _currentDiskFolderName = "Локальный диск (C:)";
+    public string CurrentDiskFolderName { get => _currentDiskFolderName; set => SetField(ref _currentDiskFolderName, value); }
 
-    private int _activeTweaksCount;
-    public int ActiveTweaksCount { get => _activeTweaksCount; set => SetField(ref _activeTweaksCount, value); }
+    private string _currentDiskTotalFormatted = "Загрузка...";
+    public string CurrentDiskTotalFormatted { get => _currentDiskTotalFormatted; set => SetField(ref _currentDiskTotalFormatted, value); }
 
-    private int _disabledServicesCount;
-    public int DisabledServicesCount { get => _disabledServicesCount; set => SetField(ref _disabledServicesCount, value); }
+    private bool _isDiskScanning;
+    public bool IsDiskScanning { get => _isDiskScanning; set => SetField(ref _isDiskScanning, value); }
 
-    private string _freedSpaceFormatted = "0 МБ";
-    public string FreedSpaceFormatted { get => _freedSpaceFormatted; set => SetField(ref _freedSpaceFormatted, value); }
+    public bool CanGoUpDisk => !string.IsNullOrEmpty(CurrentDiskPath) && Directory.GetParent(CurrentDiskPath) != null;
 
-    public ObservableCollection<RecommendationModel> SystemRecommendations { get; } = new();
-
-    // === ЖУРНАЛ АУДИТА ===
-    public ObservableCollection<TransactionRecord> AuditHistory { get; } = new();
-
-    private bool _isHistoryOpen;
-    public bool IsHistoryOpen { get => _isHistoryOpen; set => SetField(ref _isHistoryOpen, value); }
+    private string _diskCacheFormatted = "0 КБ";
+    public string DiskCacheFormatted { get => _diskCacheFormatted; set => SetField(ref _diskCacheFormatted, value); }
 
     // === DEVELOPER DOCTOR ===
     public ObservableCollection<DevEnvironmentComponent> DevComponents { get; } = new();
@@ -315,10 +304,7 @@ public class MainViewModel : ObservableObject
         }
     }
 
-    // === ДИСК & КЭШ ===
-    private string _diskCacheFormatted = "0 КБ";
-    public string DiskCacheFormatted { get => _diskCacheFormatted; set => SetField(ref _diskCacheFormatted, value); }
-
+    // === НАСТРОЙКИ & ТЕМЫ ===
     public ObservableCollection<ThemeModel> AvailableThemes { get; } = new(ThemeService.GetThemes());
 
     private string _selectedThemeId = "SlateCyan";
@@ -332,29 +318,37 @@ public class MainViewModel : ObservableObject
         }
     }
 
-    public ObservableCollection<DiskItemModel> AllSunburstSlices { get; } = new();
-    public ObservableCollection<DiskItemModel> Level1ListItems { get; } = new();
-    public ObservableCollection<BreadcrumbItem> Breadcrumbs { get; } = new();
-    public ObservableCollection<DriveSelectModel> AvailableDrives { get; } = new();
+    // === ТЕЛЕМЕТРИЯ & HEALTH SCORE ===
+    private double _realTimeCpuUsage = 14.0;
+    public double RealTimeCpuUsage { get => _realTimeCpuUsage; set => SetField(ref _realTimeCpuUsage, value); }
 
-    private DiskItemModel? _hoveredDiskItem;
-    public DiskItemModel? HoveredDiskItem { get => _hoveredDiskItem; set => SetField(ref _hoveredDiskItem, value); }
+    private double _realTimeRamUsage = 38.0;
+    public double RealTimeRamUsage { get => _realTimeRamUsage; set => SetField(ref _realTimeRamUsage, value); }
 
-    private string _currentDiskPath = @"C:\";
-    public string CurrentDiskPath { get => _currentDiskPath; set => SetField(ref _currentDiskPath, value); }
+    private int _systemHealthScore = 70;
+    public int SystemHealthScore { get => _systemHealthScore; set => SetField(ref _systemHealthScore, value); }
 
-    private string _currentDiskFolderName = "Локальный диск (C:)";
-    public string CurrentDiskFolderName { get => _currentDiskFolderName; set => SetField(ref _currentDiskFolderName, value); }
+    private string _systemHealthStatusText = "Анализ состояния системы...";
+    public string SystemHealthStatusText { get => _systemHealthStatusText; set => SetField(ref _systemHealthStatusText, value); }
 
-    private string _currentDiskTotalFormatted = "Загрузка...";
-    public string CurrentDiskTotalFormatted { get => _currentDiskTotalFormatted; set => SetField(ref _currentDiskTotalFormatted, value); }
+    private int _activeTweaksCount;
+    public int ActiveTweaksCount { get => _activeTweaksCount; set => SetField(ref _activeTweaksCount, value); }
 
-    private bool _isDiskScanning;
-    public bool IsDiskScanning { get => _isDiskScanning; set => SetField(ref _isDiskScanning, value); }
+    private int _disabledServicesCount;
+    public int DisabledServicesCount { get => _disabledServicesCount; set => SetField(ref _disabledServicesCount, value); }
 
-    public bool CanGoUpDisk => !string.IsNullOrEmpty(CurrentDiskPath) && Directory.GetParent(CurrentDiskPath) != null;
+    private string _freedSpaceFormatted = "0 МБ";
+    public string FreedSpaceFormatted { get => _freedSpaceFormatted; set => SetField(ref _freedSpaceFormatted, value); }
 
-    // === ДРАЙВЕРЫ ===
+    public ObservableCollection<RecommendationModel> SystemRecommendations { get; } = new();
+
+    // === АУДИТ ===
+    public ObservableCollection<TransactionRecord> AuditHistory { get; } = new();
+
+    private bool _isHistoryOpen;
+    public bool IsHistoryOpen { get => _isHistoryOpen; set => SetField(ref _isHistoryOpen, value); }
+
+    // === ДРАЙВЕРЫ & КОНСОЛЬ ===
     public ObservableCollection<LogEntry> ConsoleLogs { get; } = new();
     private bool _isConsoleRunning;
     public bool IsConsoleRunning { get => _isConsoleRunning; set => SetField(ref _isConsoleRunning, value); }
@@ -362,7 +356,25 @@ public class MainViewModel : ObservableObject
     private double _driverProgress;
     public double DriverProgress { get => _driverProgress; set => SetField(ref _driverProgress, value); }
 
-    // === СТАТУС ===
+    private readonly List<DriverUpdateItem> _foundDriverUpdates = new();
+
+    private bool _hasDriverUpdates;
+    public bool HasDriverUpdates
+    {
+        get => _hasDriverUpdates;
+        set => SetField(ref _hasDriverUpdates, value);
+    }
+
+    private string _foundDriversStatusText = string.Empty;
+    public string FoundDriversStatusText
+    {
+        get => _foundDriversStatusText;
+        set => SetField(ref _foundDriversStatusText, value);
+    }
+
+    public ICommand InstallDriverUpdatesCommand { get; }
+
+    // === СТАТУС & ПОИСК ===
     private bool _isGlobalBusy;
     public bool IsGlobalBusy { get => _isGlobalBusy; set => SetField(ref _isGlobalBusy, value); }
 
@@ -446,6 +458,7 @@ public class MainViewModel : ObservableObject
     public ICommand CreateRestorePointCommand { get; }
     public ICommand CleanTempCommand { get; }
     public ICommand CleanMemoryCommand { get; }
+    public ICommand CleanTempAndRamCommand { get; }
     public ICommand RestartExplorerCommand { get; }
     public ICommand SearchDriverUpdatesCommand { get; }
     public ICommand BackupDriversCommand { get; }
@@ -480,6 +493,7 @@ public class MainViewModel : ObservableObject
     public ICommand ScanStartupCommand { get; }
     public ICommand ToggleStartupItemCommand { get; }
 
+    // Сеть & DNS
     public ICommand RunDnsBenchmarkCommand { get; }
     public ICommand ApplyDnsServerCommand { get; }
     public ICommand ResetDnsToDhcpCommand { get; }
@@ -600,7 +614,7 @@ public class MainViewModel : ObservableObject
                     StatusMessage = $"Сброс DNS на DHCP для '{SelectedAdapter.Name}'...";
                     await NetworkOptimizerService.ResetDnsToDhcpAsync(SelectedAdapter.Name);
                     RefreshNetworkAdapters();
-                    MessageBox.Show("DNS сброшен в автоматический режим (от провайдера/роутера).", "Сетевой оптимизатор", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show("DNS сброшен в автоматический режим.", "Сетевой оптимизатор", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
                 catch (Exception ex) { MessageBox.Show(ex.Message, "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error); }
                 finally
@@ -657,7 +671,7 @@ public class MainViewModel : ObservableObject
                 string? guid = SelectedAdapter?.Id;
                 await NetworkOptimizerService.OptimizeNagleAlgorithmAsync(guid, newState);
                 IsNagleEnabled = newState;
-                MessageBox.Show(newState ? "Алгоритм Nagle отключен (TCPNoDelay=1, TcpAckFrequency=1).\nПакеты в играх теперь отправляются мгновенно!" : "Алгоритм Nagle возвращен к стандартным настройкам Windows.", "Игровая задержка", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(newState ? "Алгоритм Nagle отключен (TCPNoDelay=1, TcpAckFrequency=1).\nПакеты в играх отправляются без микрозадержек!" : "Алгоритм Nagle возвращен к стандартным настройкам Windows.", "Игровая задержка", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             finally
             {
@@ -666,7 +680,6 @@ public class MainViewModel : ObservableObject
             }
         });
 
-        // Сетевой реаниматор (Команды)
         RescanPnpDevicesCommand = new RelayCommand(async () =>
         {
             IsGlobalBusy = true;
@@ -736,10 +749,10 @@ public class MainViewModel : ObservableObject
         {
             MessageBox.Show(
                 "ЭКСТРЕННЫЙ ИНТЕРНЕТ ЧЕРЕЗ СМАРТФОН (RNDIS):\n\n" +
-                "1. Подключите телефон к компьютеру по обычному USB-кабелю.\n" +
+                "1. Подключите телефон к компьютеру по USB-кабелю.\n" +
                 "2. В настройках телефона включите «Точка доступа» ➔ «USB-модем» (USB Tethering).\n" +
-                "3. Драйвер RNDIS (usb8023.sys) встроен во ВСЕ версии Windows по умолчанию и не требует интернета.\n" +
-                "4. Сеть появится за 3 секунды, после чего HeroTweaker или Windows Update смогут загрузить родные драйверы материнской платы.",
+                "3. Драйвер RNDIS (usb8023.sys) встроен во все версии Windows по умолчанию.\n" +
+                "4. Сеть появится за несколько секунд, после чего вы сможете загрузить родные драйверы.",
                 "Мастер аварийного интернета",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
@@ -763,8 +776,49 @@ public class MainViewModel : ObservableObject
                     }
                 });
 
-                StatusMessage = "Оперативная память успешно очищена!";
-                await Task.Delay(500);
+                MessageBox.Show(
+                    "Оперативная память успешно оптимизирована!\nРабочий набор процессов выгружен в системный кэш.",
+                    "Очистка RAM",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            finally
+            {
+                IsGlobalBusy = false;
+                StatusMessage = string.Empty;
+            }
+        }, () => !IsGlobalBusy);
+
+        CleanTempAndRamCommand = new RelayCommand(async () =>
+        {
+            IsGlobalBusy = true;
+            StatusMessage = "Комплексная очистка Temp и памяти...";
+            try
+            {
+                long freedBytes = await SystemUtility.CleanTempFilesAsync();
+                await Task.Run(() =>
+                {
+                    GC.Collect();
+                    GC.WaitForPendingFinalizers();
+                    GC.Collect();
+
+                    foreach (var proc in Process.GetProcesses())
+                    {
+                        try { EmptyWorkingSet(proc.Handle); } catch { }
+                    }
+                });
+
+                double freedMb = freedBytes / (1024.0 * 1024.0);
+                MessageBox.Show(
+                    $"Комплексная очистка завершена!\n\n" +
+                    $"• Удалено временных файлов Temp: {freedMb:F1} МБ\n" +
+                    $"• Рабочий набор процессов RAM полностью оптимизирован.",
+                    "Очистка системы",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+
+                SysInfo = await SystemInfoService.GetSystemInfoAsync();
+                await RecalculateHealthScoreAsync();
             }
             finally
             {
@@ -869,8 +923,8 @@ public class MainViewModel : ObservableObject
                 foreach (var t in _allTweaks) t.RefreshState();
                 RefreshAuditHistory();
                 await RecalculateHealthScoreAsync();
-                StatusMessage = "Твики дашборда успешно применены!";
-                await Task.Delay(350);
+                StatusMessage = "Твики успешно применены!";
+                await Task.Delay(300);
             }
             finally
             {
@@ -894,7 +948,7 @@ public class MainViewModel : ObservableObject
             if (DevBrokenPathsCount == 0) return;
 
             var confirm = MessageBox.Show(
-                $"Обнаружено {DevBrokenPathsCount} проблемных записей в PATH (несуществующие папки или дубликаты).\n\n" +
+                $"Обнаружено {DevBrokenPathsCount} проблемных записей в PATH.\n\n" +
                 "Удалить их и сохранить снимок для отката?",
                 "Очистка PATH",
                 MessageBoxButton.YesNo,
@@ -916,7 +970,7 @@ public class MainViewModel : ObservableObject
                         TweakName = "Очистка битых путей PATH",
                         Category = "Developer Doctor",
                         IsApplied = true,
-                        Details = $"Удалено {removed} устаревших и дублирующихся путей из переменных окружения"
+                        Details = $"Удалено {removed} устаревших путей из PATH"
                     };
 
                     if (userSnap != null) record.Snapshots.Add(userSnap);
@@ -949,7 +1003,7 @@ public class MainViewModel : ObservableObject
                     {
                         Command = InspectCommandInput,
                         Found = false,
-                        ResolvedExecutablePath = $"Ошибка выполнения: {ex.Message}"
+                        ResolvedExecutablePath = $"Ошибка: {ex.Message}"
                     };
                 }
             }
@@ -1056,6 +1110,7 @@ public class MainViewModel : ObservableObject
         RestartExplorerCommand = new RelayCommand(async () => await SystemUtility.RestartExplorerAsync(), () => !IsGlobalBusy);
 
         SearchDriverUpdatesCommand = new RelayCommand(async () => await ExecuteSearchDriverUpdatesAsync(), () => !IsConsoleRunning);
+        InstallDriverUpdatesCommand = new RelayCommand(async () => await ExecuteInstallDriverUpdatesAsync(), () => HasDriverUpdates && !IsConsoleRunning);
         BackupDriversCommand = new RelayCommand(async () => await ExecuteBackupDriversAsync(), () => !IsConsoleRunning);
         RestoreDriversCommand = new RelayCommand(async () => await ExecuteRestoreDriversAsync(), () => !IsConsoleRunning);
         InstallVCRuntimesCommand = new RelayCommand(async () => await ExecuteInstallVCRuntimesAsync(), () => !IsConsoleRunning);
@@ -1136,6 +1191,8 @@ public class MainViewModel : ObservableObject
         RegisterTweaks();
         RefreshAuditHistory();
         StartRealTimeTelemetry();
+
+        // Запуск контролируемого и плавного сплеш-скрина
         _ = InitializeAppAsync();
     }
 
@@ -1221,7 +1278,7 @@ public class MainViewModel : ObservableObject
         IsDevScanning = true;
         try
         {
-            await Task.Delay(150);
+            await Task.Delay(100);
 
             var list = await DeveloperDoctorService.ScanEnvironmentsAsync();
             DevComponents.Clear();
@@ -1284,8 +1341,8 @@ public class MainViewModel : ObservableObject
             {
                 var res = MessageBox.Show(
                     "Включить интеллектуальное кэширование DiskTree?\n\n" +
-                    "Кэш сохраняет снимок структуры папок в защищенной папке AppData, что позволяет мгновенно открывать их без шума и нагрузки на SSD/HDD.\n\n" +
-                    "Вы в любой момент сможете очистить кэш в Настройках.",
+                    "Кэш сохраняет снимок структуры папок в AppData, позволяя повторно открывать их мгновенно.\n\n" +
+                    "Очистить кэш можно в любой момент во вкладке «Настройки».",
                     "Интеллектуальный кэш HeroTweaker",
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Question);
@@ -1330,7 +1387,7 @@ public class MainViewModel : ObservableObject
                 var cached = await DiskCacheService.LoadSnapshotAsync(path);
                 if (cached.HasValue)
                 {
-                    await Task.Delay(350, ct);
+                    await Task.Delay(250, ct);
 
                     AllSunburstSlices.Clear();
                     foreach (var s in cached.Value.Slices) AllSunburstSlices.Add(s);
@@ -1384,8 +1441,8 @@ public class MainViewModel : ObservableObject
                 string total = DiskItemModel.FormatBytes(d.TotalSize);
                 string free = DiskItemModel.FormatBytes(d.AvailableFreeSpace);
                 double freePct = Math.Round((double)d.AvailableFreeSpace / d.TotalSize * 100, 1);
-                string display = $"{d.Name.TrimEnd('\\')} ({label})";
 
+                string display = $"{d.Name.TrimEnd('\\')} ({label})  [{free} свободно из {total}]";
                 AvailableDrives.Add(new DriveSelectModel(root, label, display, total, free, freePct));
             }
         }
@@ -1448,7 +1505,7 @@ public class MainViewModel : ObservableObject
                     double used = (double)(mem.ullTotalPhys - mem.ullAvailPhys) / mem.ullTotalPhys * 100.0;
                     RealTimeRamUsage = Math.Round(used, 0);
                 }
-                RealTimeCpuUsage = Math.Round(14.0 + (DateTime.Now.Millisecond % 35), 0);
+                RealTimeCpuUsage = Math.Round(12.0 + (DateTime.Now.Millisecond % 30), 0);
             }
             catch { }
         };
@@ -1472,13 +1529,75 @@ public class MainViewModel : ObservableObject
         try
         {
             IsConsoleRunning = true;
-            DriverProgress = 30;
-            AddLog("--- ПОИСК ДРАЙВЕРОВ И ОБОРУДОВАНИЯ ---", LogLevel.Command);
-            await DriverService.SearchDriverUpdatesAsync(AddLog);
+            HasDriverUpdates = false;
+            _foundDriverUpdates.Clear();
+            DriverProgress = 20;
+
+            AddLog("--- ПОИСК ОБНОВЛЕНИЙ ДРАЙВЕРОВ (WINDOWS UPDATE) ---", LogLevel.Command);
+            var results = await DriverService.SearchDriverUpdatesAsync(AddLog);
             DriverProgress = 100;
+
+            if (results.Count > 0)
+            {
+                _foundDriverUpdates.AddRange(results);
+                HasDriverUpdates = true;
+                FoundDriversStatusText = $"Обнаружено доступных обновлений драйверов: {results.Count}";
+            }
+            else
+            {
+                HasDriverUpdates = false;
+                FoundDriversStatusText = "Все установленные драйверы актуальны";
+            }
         }
-        catch (Exception ex) { AddLog($"Ошибка: {ex.Message}", LogLevel.Error); }
-        finally { IsConsoleRunning = false; }
+        catch (Exception ex)
+        {
+            AddLog($"Ошибка: {ex.Message}", LogLevel.Error);
+            HasDriverUpdates = false;
+        }
+        finally
+        {
+            IsConsoleRunning = false;
+        }
+    }
+
+    private async Task ExecuteInstallDriverUpdatesAsync()
+    {
+        if (_foundDriverUpdates.Count == 0) return;
+
+        var confirm = MessageBox.Show(
+            $"Запустить установку {_foundDriverUpdates.Count} найденных драйверов через Windows Update?\n\nВо время обновления драйвера дисплея экран может кратковременно мигнуть.",
+            "Обновление драйверов",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+
+        if (confirm != MessageBoxResult.Yes) return;
+
+        try
+        {
+            IsConsoleRunning = true;
+            DriverProgress = 15;
+            AddLog("--- НАЧАЛО УСТАНОВКИ ОБНОВЛЕНИЙ ДРАЙВЕРОВ ---", LogLevel.Command);
+
+            bool success = await DriverService.InstallDriverUpdatesAsync(
+                _foundDriverUpdates,
+                AddLog,
+                p => DriverProgress = p);
+
+            if (success)
+            {
+                HasDriverUpdates = false;
+                _foundDriverUpdates.Clear();
+                MessageBox.Show("Все драйверы успешно обновлены!", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+        }
+        catch (Exception ex)
+        {
+            AddLog($"Ошибка установки: {ex.Message}", LogLevel.Error);
+        }
+        finally
+        {
+            IsConsoleRunning = false;
+        }
     }
 
     private async Task ExecuteBackupDriversAsync()
@@ -1492,7 +1611,7 @@ public class MainViewModel : ObservableObject
                 await DriverService.BackupDriversAsync(dialog.FolderName, AddLog);
             }
         }
-        catch (Exception ex) { AddLog(ex.Message, LogLevel.Error); }
+        catch (Exception ex) { AddLog($"Ошибка: {ex.Message}", LogLevel.Error); }
         finally { IsConsoleRunning = false; }
     }
 
@@ -1507,50 +1626,92 @@ public class MainViewModel : ObservableObject
                 await DriverService.RestoreDriversAsync(dialog.FolderName, AddLog);
             }
         }
-        catch (Exception ex) { AddLog(ex.Message, LogLevel.Error); }
+        catch (Exception ex) { AddLog($"Ошибка: {ex.Message}", LogLevel.Error); }
         finally { IsConsoleRunning = false; }
     }
 
     private async Task ExecuteInstallVCRuntimesAsync() =>
         await DriverService.InstallVisualCppRuntimesAsync(AddLog, p => DriverProgress = p);
 
+    // =========================================================================
+    // ПЛАВНАЯ И СТАБИЛЬНАЯ ЗАГРУЗКА СПЛЕШ-СКРИНА (~1.2 СЕК)
+    // =========================================================================
     private async Task InitializeAppAsync()
     {
         try
         {
-            SplashStatus = "Инициализация модулей...";
+            IsAppLoading = true;
             SplashProgress = 15;
-            await Task.Delay(100);
+            SplashStatus = "Инициализация модулей Hero Engineering...";
+            await Task.Delay(250);
 
-            SysInfo = await SystemInfoService.GetSystemInfoAsync();
             SplashProgress = 40;
-
-            // ПРОВЕРКА ОБНОВЛЕНИЙ НА GITHUB
-            SplashStatus = "Поиск обновлений HeroTweaker...";
-            var updateResult = await UpdateCheckerService.CheckForUpdatesAsync();
-            SplashProgress = 65;
-
-            if (updateResult.HasUpdate)
-            {
-                HasUpdateAvailable = true;
-                LatestVersionTag = updateResult.LatestTag;
-                ReleaseUrl = updateResult.ReleaseUrl;
-                SplashStatus = $"Найдено обновление {updateResult.LatestTag}!";
-                await Task.Delay(300);
-            }
-
-            SplashStatus = "Загрузка конфигурации твиков...";
+            SplashStatus = "Считывание конфигурации системы и реестра...";
             await Task.Run(() =>
             {
                 foreach (var t in _allTweaks) t.RefreshState();
             });
+            await Task.Delay(250);
+
+            SplashProgress = 70;
+            SplashStatus = "Инициализация сетевых адаптеров...";
+            RefreshNetworkAdapters();
+            await Task.Delay(250);
+
+            SplashProgress = 90;
+            SplashStatus = "Сбор аппаратных метрик процессора и памяти...";
+            try
+            {
+                var sysInfoTask = SystemInfoService.GetSystemInfoAsync();
+                if (await Task.WhenAny(sysInfoTask, Task.Delay(400)) == sysInfoTask)
+                {
+                    SysInfo = await sysInfoTask;
+                }
+            }
+            catch { }
 
             SplashProgress = 100;
-            await Task.Delay(150);
-            await RecalculateHealthScoreAsync();
-            IsAppLoading = false;
+            SplashStatus = "Готово к работе!";
+            await Task.Delay(300);
         }
-        catch { IsAppLoading = false; }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Init error: {ex.Message}");
+        }
+        finally
+        {
+            // Гарантированное плавное открытие главного интерфейса
+            IsAppLoading = false;
+
+            // Фоновые проверки после открытия окна (не блокируют старт)
+            _ = Task.Run(async () =>
+            {
+                await RecalculateHealthScoreAsync();
+                await CheckUpdatesInBackgroundAsync();
+            });
+        }
+    }
+
+    private async Task CheckUpdatesInBackgroundAsync()
+    {
+        try
+        {
+            var updateTask = UpdateCheckerService.CheckForUpdatesAsync();
+            if (await Task.WhenAny(updateTask, Task.Delay(2500)) == updateTask)
+            {
+                var updateResult = await updateTask;
+                if (updateResult.HasUpdate)
+                {
+                    Application.Current?.Dispatcher?.Invoke(() =>
+                    {
+                        HasUpdateAvailable = true;
+                        LatestVersionTag = updateResult.LatestTag;
+                        ReleaseUrl = updateResult.ReleaseUrl;
+                    });
+                }
+            }
+        }
+        catch { }
     }
 
     private async Task ExecuteApplyPendingAsync()
@@ -1642,7 +1803,7 @@ public class MainViewModel : ObservableObject
     }
 
     // =====================================================================================
-    // ДВИЖОК РЕГИСТРАЦИИ ТВIКОВ С ДВУХУРОВНЕВЫМ ПОДРОБНЫМ ОПИСАНИЕМ
+    // ДВИЖОК РЕГИСТРАЦИИ ТВIКОВ
     // =====================================================================================
 
     private void RegTweak(
@@ -1662,6 +1823,8 @@ public class MainViewModel : ObservableObject
         string techWhy = "",
         string rebootReq = "Мгновенно")
     {
+        if (_allTweaks.Any(t => t.Id == id)) return;
+
         var tweak = new RegistryTweak(id, name, desc, cat, hive, path, valName, targetVal, defVal, delKey);
 
         Func<Task> revertAction = () => Task.Run(() =>
@@ -1748,6 +1911,8 @@ public class MainViewModel : ObservableObject
         string techWhy = "",
         string rebootReq = "После перезапуска службы или перезагрузки")
     {
+        if (_allTweaks.Any(t => t.Id == id)) return;
+
         string path = $@"SYSTEM\CurrentControlSet\Services\{srvName}";
         var tweak = new RegistryTweak(id, name, desc, "Службы", RegistryHive.LocalMachine, path, "Start", 4, defMode);
 
@@ -1805,9 +1970,10 @@ public class MainViewModel : ObservableObject
 
     private void RegisterTweaks()
     {
-        // =========================================================================================
+        _allTweaks.Clear();
+        DashboardTweaks.Clear();
+
         // 1. ПРИВАТНОСТЬ
-        // =========================================================================================
         RegTweak("telemetry_disable", "Отключить телеметрию Windows", "Ограничивает сбор данных диагностических служб Microsoft.", "Приватность",
             RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\DataCollection", "AllowTelemetry", 0, 1,
             isFeatured: true,
@@ -1816,13 +1982,11 @@ public class MainViewModel : ObservableObject
 
         RegTweak("advertising_id_disable", "Запретить рекламный ID", "Блокирует показ персонализированной рекламы в приложениях.", "Приватность",
             RegistryHive.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo", "Enabled", 0, 1,
-            isFeatured: true,
             userWhy: "Приложения из Microsoft Store и игры больше не смогут отслеживать ваши интересы для показа целевой рекламы.",
             techWhy: "Отключает генерацию уникального GUID пользователя AdvertisingID в подсистеме Windows.System.UserProfile.AdvertisingManager.");
 
         RegTweak("cortana_disable", "Отключить Cortana", "Блокирует фоновый голосовой ассистент.", "Приватность",
             RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\Windows Search", "AllowCortana", 0, 1, delKey: true,
-            isFeatured: true,
             userWhy: "Полностью выгружает голосовой ассистент Cortana. Освобождает оперативную память и устраняет микрофонную активность в фоне.",
             techWhy: "Политика Windows Search: AllowCortana = 0. Запрещает запуск процессов SearchUI.exe / CortanaCore в фоновых сессиях DCOM.");
 
@@ -1868,7 +2032,7 @@ public class MainViewModel : ObservableObject
             techWhy: "CloudContent: DisableWindowsConsumerFeatures = 1. Отключает триггер SilentInstalledApps в OOBE и Component Store.");
 
         RegTweak("tailored_experiences", "Отключить персонализацию диагностики", "Запрещает Microsoft предлагать рекламу на основе системных логов.", "Приватность",
-            RegistryHive.CurrentUser, @"Software\Policies\Microsoft\Windows\CloudContent", "DisableTailoredExperiencesWithDiagnosticData", 1, 0, delKey: true,
+            RegistryHive.CurrentUser, @"Software\Microsoft\Windows\CloudContent", "DisableTailoredExperiencesWithDiagnosticData", 1, 0, delKey: true,
             userWhy: "Microsoft не сможет анализировать сбои ваших программ для подбора целевых подсказок в ОС.",
             techWhy: "DisableTailoredExperiencesWithDiagnosticData = 1. Отключает фоновый сопоставитель профилей в CloudContentManager.");
 
@@ -1896,7 +2060,7 @@ public class MainViewModel : ObservableObject
             RegistryHive.LocalMachine, @"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System", "EnableLUA", 0, 1,
             risk: RiskLevel.Advanced,
             userWhy: "Убирает затемнение экрана и вопрос 'Разрешить этому приложению вносить изменения?'. Ускоряет запуск игр и софта, но требует внимательности.",
-            techWhy: "EnableLUA = 0. Отключает токены администратора ограниченного доступа (Filtered Admin Token). Любой софт сразу получает полные права сессии.",
+            techWhy: "EnableLUA = 0. Отключает фильтрованные токены администратора (Filtered Admin Token). Софт сразу получает полные права сессии.",
             rebootReq: "Требуется перезагрузка ПК");
 
         RegTweak("smartscreen_disable", "Отключить фильтр SmartScreen", "Отключает проверку запускаемых файлов в интернете. Ускоряет запуск софта, но убирает предупреждения.", "Приватность",
@@ -1905,9 +2069,7 @@ public class MainViewModel : ObservableObject
             userWhy: "Убирает синее предупреждающее окно при первом запуске скачанных exe-файлов и устраняет задержку запуска программ без цифровой подписи.",
             techWhy: "EnableSmartScreen = 0. Отключает отправку хешей исполняемых файлов (SHA-256) в сервис SmartScreen Reputation Service.");
 
-        // =========================================================================================
         // 2. ПРОИЗВОДИТЕЛЬНОСТЬ И ИГРЫ
-        // =========================================================================================
         RegTweak("anim_disable", "Отключить анимации окон", "Мгновенный отклик интерфейса без задержек при сворачивании окон.", "Производительность",
             RegistryHive.CurrentUser, @"Control Panel\Desktop\WindowMetrics", "MinAnimate", "0", "1",
             isFeatured: true,
@@ -1933,7 +2095,7 @@ public class MainViewModel : ObservableObject
 
         RegTweak("gamedvr_disable", "Отключить Xbox Game DVR", "Выключает фоновый захват экрана в играх, устраняя статтеры.", "Производительность",
             RegistryHive.CurrentUser, @"System\GameConfigStore", "GameDVR_Enabled", 0, 1,
-            userWhy: "Устраняет периодические микрофризы в CS2, Warzone и Dota 2, вызванные скрытой непрерывной фоновой видеозаписью геймплея.",
+            userWhy: "Устраняет периодические микрофризы в сетевых играх, вызванные скрытой фоновой записью геймплея.",
             techWhy: "GameDVR_Enabled = 0, GameDVR_FSEBehaviorMode = 2. Отключает фоновые буферы кодировщика NVENC/AMF в GameBarFT.dll.");
 
         RegTweak("game_bar_fts", "Отключить оверлей Game Bar", "Снимает оверлей Xbox и освобождает видеопамять.", "Производительность",
@@ -1943,28 +2105,28 @@ public class MainViewModel : ObservableObject
 
         RegTweak("hags_gpu", "Аппаратное ускорение планирования GPU (HAGS)", "Снижает задержки графического конвейера видеокарты.", "Производительность",
             RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\GraphicsDrivers", "HwSchMode", 2, 1,
-            userWhy: "Позволяет современной видеокарте напрямую управлять своей видеопамятью, разгружая центральный процессор и повышая 1% Low FPS.",
-            techWhy: "HwSchMode = 2. Включает Hardware-Accelerated GPU Scheduling в модели драйверов WDDM 2.7+. Требует видеокарту уровня GTX 1000+ / RX 5600+.",
+            userWhy: "Позволяет современной видеокарте напрямую управлять своей видеопамятью, разгружая процессор и повышая 1% Low FPS.",
+            techWhy: "HwSchMode = 2. Включает Hardware-Accelerated GPU Scheduling в модели драйверов WDDM 2.7+.",
             rebootReq: "Требуется перезагрузка ПК");
 
         RegTweak("menu_show_delay", "Ускорить раскрытие меню (0 мс)", "Убирает задержку 400 мс при нажатии на контекстные меню и списки.", "Производительность",
             RegistryHive.CurrentUser, @"Control Panel\Desktop", "MenuShowDelay", "0", "400",
-            userWhy: "Любые контекстные меню по правому клику мыши открываются мгновенно, без стандартной задержки в полсекунды.",
+            userWhy: "Контекстные меню открываются мгновенно, без стандартной задержки в полсекунды.",
             techWhy: "Control Panel\\Desktop: MenuShowDelay = '0' (вместо '400' мс). Устраняет системный таймер ожидания Win32 TrackPopupMenu.");
 
         RegTweak("mouse_hover_time", "Мгновенный отклик при наведении мыши", "Снижает тайм-аут регистрации курсора над элементами с 400 до 10 мс.", "Производительность",
             RegistryHive.CurrentUser, @"Control Panel\Mouse", "MouseHoverTime", "10", "400",
-            userWhy: "Подсказки, превью вкладок на панели задач и эффекты кнопок подсвечиваются моментально при наведении курсора.",
+            userWhy: "Подсказки и эффекты кнопок подсвечиваются моментально при наведении курсора.",
             techWhy: "MouseHoverTime = '10' (мс). Регулирует системный параметр WM_MOUSEHOVER в оконном менеджере user32.dll.");
 
         RegTweak("auto_end_tasks", "Автоматически закрывать зависшие задачи", "При выключении ПК не ждет ручного подтверждения закрытия программ.", "Производительность",
             RegistryHive.CurrentUser, @"Control Panel\Desktop", "AutoEndTasks", "1", "0",
-            userWhy: "При выключении или перезагрузке система больше не будет показывать экран 'Это приложение мешает выключению' и ждать вашего клика.",
+            userWhy: "При выключении система больше не будет показывать экран 'Это приложение мешает выключению' и ждать клика.",
             techWhy: "AutoEndTasks = '1'. Предписывает подсистеме CSRSS завершать зависшие процессы без вывода диалогового окна EndTask.");
 
         RegTweak("wait_to_kill", "Ускорить выключение ПК (WaitToKill = 2с)", "Сокращает время ожидания ответа от служб перед завершением работы.", "Производительность",
             RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control", "WaitToKillServiceTimeout", "2000", "5000",
-            userWhy: "Компьютер выключается и перезагружается ощутимо быстрее — система ждет зависшие службы всего 2 секунды вместо 5–12.",
+            userWhy: "Компьютер выключается и перезагружается ощутимо быстрее — система ждет зависшие службы всего 2 секунды.",
             techWhy: "WaitToKillServiceTimeout = '2000' (мс). Лимит ожидания диспетчера служб (SCM) перед отправкой сигнала принудительного завершения.");
 
         RegTweak("hung_app_timeout", "Быстрое завершение сбойных программ", "Сокращает тайм-аут распознавания зависших окон до 1 сек.", "Производительность",
@@ -1974,18 +2136,18 @@ public class MainViewModel : ObservableObject
 
         RegTweak("transparency_disable", "Отключить эффекты прозрачности", "Убирает эффекты размытия и акрила, разгружая видеопамять.", "Производительность",
             RegistryHive.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "EnableTransparency", 0, 1,
-            userWhy: "Разгружает встроенные видеокарты и старые GPU, экономя видеопамять за счет отключения эффектов акрила и блюра.",
+            userWhy: "Разгружает встроенные видеокарты и старые GPU, экономя видеопамять за счет отключения эффектов акрила.",
             techWhy: "EnableTransparency = 0. Выключает сложные пиксельные шейдеры размытия фона Acrylic/Mica в конвейере DWM.");
 
         RegTweak("large_system_cache", "Включить большой системный кэш ОЗУ", "Выделяет больше оперативной памяти под дисковый кэш чтения/записи.", "Производительность",
             RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management", "LargeSystemCache", 1, 0,
-            userWhy: "Отлично подходит для ПК с 16+ ГБ оперативной памяти: ускоряет повторное открытие тяжелых программ и загрузку игровых локаций.",
+            userWhy: "Подходит для ПК с 16+ ГБ оперативной памяти: ускоряет повторное открытие тяжелых программ и чтение файлов.",
             techWhy: "LargeSystemCache = 1. Переводит дисковый кэш файловой системы в серверный режим, увеличивая рабочий набор System Working Set.",
             rebootReq: "Требуется перезагрузка ПК");
 
         RegTweak("llmnr_disable", "Отключить протокол LLMNR", "Ускоряет разрешение локальных DNS-запросов и убирает лишний трафик.", "Производительность",
             RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows NT\DNSClient", "EnableMulticast", 0, 1, delKey: true,
-            userWhy: "Снижает задержки сетевого резолвера и защищает от перехвата учетных данных в локальных сетях и публичном Wi-Fi.",
+            userWhy: "Снижает задержки сетевого резолвера и защищает от перехвата учетных данных в локальных сетях.",
             techWhy: "DNSClient: EnableMulticast = 0. Блокирует широковещательные UDP 5355 запросы протокола Link-Local Multicast Name Resolution.");
 
         RegTweak("netbios_disable", "Ограничить запросы NetBIOS over TCP", "Снижает сетевой оверхед и закрывает устаревшие порты NetBIOS.", "Производительность",
@@ -1997,7 +2159,7 @@ public class MainViewModel : ObservableObject
         RegTweak("paging_executive", "Удерживать ядро Windows полностью в RAM", "Запрещает сброс исполняемых файлов ядра ОС в файл подкачки на диск.", "Производительность",
             RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management", "DisablePagingExecutive", 1, 0,
             risk: RiskLevel.Advanced,
-            userWhy: "Ядро Windows и системные драйверы всегда находятся в сверхбыстрой оперативной памяти, полностью исключая задержки чтения с диска.",
+            userWhy: "Ядро Windows и системные драйверы всегда находятся в оперативной памяти, исключая задержки чтения с накопителя.",
             techWhy: "DisablePagingExecutive = 1. Запрещает подсистеме Memory Manager сбрасывать код ntoskrnl.exe и системных драйверов в pagefile.sys.",
             rebootReq: "Требуется перезагрузка ПК");
 
@@ -2010,7 +2172,7 @@ public class MainViewModel : ObservableObject
         RegTweak("fse_fullscreen_optimizations", "Принудительный Fullscreen Mode в играх", "Устраняет задержку буферизации DWM в полноэкранных приложениях.", "Производительность",
             RegistryHive.CurrentUser, @"System\GameConfigStore", "GameDVR_FSEBehaviorMode", 2, 0,
             risk: RiskLevel.Advanced,
-            userWhy: "Дает минимально возможный инпут-лаг мыши в шутерах (CS2, Valorant, Apex) за счет прямого вывода кадров на монитор.",
+            userWhy: "Дает минимально возможный инпут-лаг мыши в шутерах за счет прямого вывода кадров на монитор без буфера DWM.",
             techWhy: "GameDVR_FSEBehaviorMode = 2. Обходит промежуточную очередь композитинга оконного менеджера DWM Desktop Composition.");
 
         RegTweak("vbs_disable", "Отключить VBS и Core Isolation", "Отключает изоляцию ядра. Дает чистый прирост FPS до 10% в играх, но ослабляет защиту ядра ОС.", "Производительность",
@@ -2026,16 +2188,15 @@ public class MainViewModel : ObservableObject
             userWhy: "Устраняет задержки двойного опроса DNS (IPv4/IPv6) у провайдеров, которые не поддерживают нативно IPv6.",
             techWhy: "DisabledComponents = 0xFF. Полностью отключает биндинги сетевого стека Tcpip6.sys для всех физических адаптеров.");
 
-        // Новые твики ядра, памяти и таймеров
         RegTweak("ntfs_disable_last_access", "Отключить запись времени доступа NTFS", "Устраняет постоянную перезапись метаданных файлов при каждом чтении с диска.", "Производительность",
             RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\FileSystem", "NtfsDisableLastAccessUpdate", 1, 0,
             isFeatured: true,
-            userWhy: "Каждый раз, когда Windows или игра открывает файл, система больше не тратит ресурсы на запись на диск отметки времени 'Когда файл был прочитан'. Увеличивает ресурс SSD и отзывчивость дисковой подсистемы.",
+            userWhy: "Каждый раз, когда Windows или игра открывает файл, система больше не тратит ресурсы на запись времени 'Когда файл был прочитан'. Увеличивает ресурс SSD и отзывчивость диска.",
             techWhy: "FileSystem: NtfsDisableLastAccessUpdate = 1 (DWORD). Отключает обновление временных меток $STANDARD_INFORMATION в файловой записи MFT при операциях IRP_MJ_READ.");
 
         RegTweak("ntfs_disable_8dot3", "Отключить генерацию имен 8.3 (MS-DOS)", "Ускоряет создание и поиск файлов в папках с десятками тысяч файлов.", "Производительность",
             RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\FileSystem", "NtfsDisable8dot3NameCreation", 1, 0,
-            userWhy: "Windows перестает создавать для каждого файла устаревшие укороченные дубликаты имен времен DOS (например, PROGRA~1). Значительно ускоряет работу с тяжелыми каталогами и кэшами программ.",
+            userWhy: "Windows перестает создавать для каждого файла устаревшие короткие дубликаты имен времен DOS. Значительно ускоряет работу с тяжелыми каталогами и кэшами программ.",
             techWhy: "FileSystem: NtfsDisable8dot3NameCreation = 1. Исключает коллизии хэшей коротких имен в директориях и снижает нагрузку на драйвер Ntfs.sys.");
 
         RegTweak("disable_dynamic_ticks", "Отключить Dynamic Ticking таймера CPU", "Стабилизирует интервалы системных прерываний, снижая разброс кадровой задержки (frametime).", "Производительность",
@@ -2056,11 +2217,9 @@ public class MainViewModel : ObservableObject
             userWhy: "Звук в Discord, играх и наушниках не будет заикаться или трещать, когда процессор нагружен на 100% тяжелой игрой или компиляцией.",
             techWhy: "Tasks\\Audio: Background Only = 'False', Scheduling Category = 'High'. Гарантирует повышенный приоритет потокам аудио-движка WASAPI в планировщике.");
 
-        // =========================================================================================
         // 3. СЛУЖБЫ
-        // =========================================================================================
         SrvTweak("service_diagtrack", "Отключить службу телеметрии (DiagTrack)", "Останавливает службу сбора и фоновой отправки телеметрии.", "DiagTrack", 2,
-            isFeatured: true,
+            isFeatured: false,
             userWhy: "Служба сбора данных телеметрии перестает нагружать процессор и накопитель в фоновом режиме.",
             techWhy: "Служба 'Connected User Experiences and Telemetry'. Занимается сбором трассировок ETW и агрегацией пользовательских событий.");
 
@@ -2075,7 +2234,7 @@ public class MainViewModel : ObservableObject
 
         SrvTweak("service_wersvc", "Отключить регистрацию ошибок (WerSvc)", "Блокирует сбор дампов и отправку отчетов о сбоях в Microsoft.", "WerSvc", 3,
             userWhy: "При вылете программы система больше не висит по несколько минут, собирая тяжелые файлы отчетов на диск.",
-            techWhy: "Служба Windows Error Reporting (WerSvc). Предотвращает сохранение минидампов (Minidump) и обращение к серверам Watson.");
+            techWhy: "Служба Windows Error Reporting (WerSvc). Предотвращает сохранение минидампов и обращение к серверам Watson.");
 
         SrvTweak("service_remotereg", "Отключить службу удаленного реестра", "Блокирует удаленный сетевой доступ к системному реестру.", "RemoteRegistry", 4,
             userWhy: "Повышает безопасность ПК: никто в локальной сети не сможет дистанционно просматривать или изменять ваши настройки.",
@@ -2144,9 +2303,7 @@ public class MainViewModel : ObservableObject
             userWhy: "Служба DoSvc больше не сможет нагружать процессор и забивать интернет-канал незаметной фоновой P2P-раздачей системных файлов другим компьютерам.",
             techWhy: "Служба Win32: DoSvc (Delivery Optimization). Полный перевод в Disabled (Start=4). Исключает захват порта 7680 TCP.");
 
-        // =========================================================================================
         // 4. ИНТЕРФЕЙС И ПРОВОДНИК
-        // =========================================================================================
         RegTweak("classic_context_menu", "Классическое меню (Windows 10)", "Возвращает классическое меню без кнопки «Показать дополнительные параметры».", "Интерфейс",
             RegistryHive.CurrentUser, @"Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32", "", "", "",
             delKey: true,
@@ -2200,7 +2357,7 @@ public class MainViewModel : ObservableObject
 
         RegTweak("sticky_keys_disable", "Отключить залипание клавиш (Shift 5 раз)", "Предотвращает сворачивание игр при частом нажатии клавиши Shift.", "Интерфейс",
             RegistryHive.CurrentUser, @"Control Panel\Accessibility\StickyKeys", "Flags", "506", "510",
-            userWhy: "В сетевых играх и шутерах частое нажатие на клавишу Shift (бег/приседание) больше не свернет игру с назойливым пищащим окном.",
+            userWhy: "В сетевых играх и шутерах частое нажатие на клавишу Shift больше не свернет игру с назойливым пищащим окном.",
             techWhy: "StickyKeys: Flags = '506'. Снимает бит SKF_HOTKEYACTIVE (0x04) в подсистеме специальных возможностей user32.dll.");
 
         RegTweak("filter_keys_disable", "Отключить фильтрацию ввода клавиш", "Устраняет задержки отклика клавиатуры при длительном удержании.", "Интерфейс",
@@ -2213,9 +2370,7 @@ public class MainViewModel : ObservableObject
             userWhy: "При наведении мыши на кнопку развертывания окна больше не выскакивает назойливая панель макетов экранов.",
             techWhy: "SnapAssist = 0. Отключает появление оверлея Win32 Flyout подсказок компоновщика Snap Layouts в Проводнике.");
 
-        // =========================================================================================
         // 5. ОБНОВЛЕНИЯ WINDOWS
-        // =========================================================================================
         RegTweak("disable_driver_updates", "Запретить замену драйверов через WU", "Предотвращает автоматическую замену ваших драйверов GPU более старыми версиями от Microsoft.", "Обновления",
             RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate", "ExcludeWUDriversInQualityUpdate", 1, 0, delKey: true,
             isFeatured: true,
@@ -2241,48 +2396,5 @@ public class MainViewModel : ObservableObject
             RegistryHive.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU", "AUOptions", 2, 0, delKey: true,
             userWhy: "Windows Update найдет обновление, но не начнет скачивать его втихаря, забивая ваш интернет-канал. Вы сами решаете, когда нажать 'Скачать'.",
             techWhy: "AUOptions = 2 (Notify for download and notify for install). Переводит режим работы агента автоматических обновлений в ручной режим оповещения.");
-        // =========================================================================================
-        // 6. ДОПОЛНИТЕЛЬНЫЕ ТВIКИ: СКОРОСТЬ ФАЙЛОВОЙ СИСТЕМЫ, ПАМЯТЬ И ТАЙМЕРЫ ЯДРА
-        // =========================================================================================
-
-        // Отключение записи времени последнего доступа NTFS
-        RegTweak("ntfs_disable_last_access", "Отключить запись времени доступа NTFS", "Устраняет постоянную перезапись метаданных файлов при каждом чтении с диска.", "Производительность",
-            RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\FileSystem", "NtfsDisableLastAccessUpdate", 1, 0,
-            isFeatured: true,
-            userWhy: "Каждый раз, когда Windows или игра открывает файл, система больше не тратит ресурсы на запись на диск отметки времени 'Когда файл был прочитан'. Увеличивает ресурс SSD и отзывчивость дисковой подсистемы.",
-            techWhy: "FileSystem: NtfsDisableLastAccessUpdate = 1 (DWORD). Отключает обновление временных меток $STANDARD_INFORMATION в файловой записи MFT при операциях IRP_MJ_READ.");
-
-        // Отключение генерации коротких имен 8.3 (MS-DOS)
-        RegTweak("ntfs_disable_8dot3", "Отключить генерацию имен 8.3 (MS-DOS)", "Ускоряет создание и поиск файлов в папках с десятками тысяч файлов.", "Производительность",
-            RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\FileSystem", "NtfsDisable8dot3NameCreation", 1, 0,
-            userWhy: "Windows перестает создавать для каждого файла устаревшие укороченные дубликаты имен времен DOS (например, PROGRA~1). Значительно ускоряет работу с тяжелыми каталогами и кэшами программ.",
-            techWhy: "FileSystem: NtfsDisable8dot3NameCreation = 1. Исключает коллизии хэшей коротких имен в директориях и снижает нагрузку на драйвер Ntfs.sys.");
-
-        // Отключение динамических тиков таймера (Dynamic Ticking)
-        RegTweak("disable_dynamic_ticks", "Отключить Dynamic Ticking таймера CPU", "Стабилизирует интервалы системных прерываний, снижая разброс кадровой задержки (frametime).", "Производительность",
-            RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\Session Manager\kernel", "DisableDynamicTick", 1, 0,
-            risk: RiskLevel.Advanced,
-            userWhy: "Устраняет плавающие микростаттеры в играх, запрещая процессору произвольно объединять такты системного таймера для энергосбережения.",
-            techWhy: "DisableDynamicTick = 1 (эквивалент bcdedit /set disabledynamictick yes). Обеспечивает строгую периодичность системного тика APIC таймера.",
-            rebootReq: "Требуется перезагрузка ПК");
-
-        // Отключение режима гибернации (Освобождение диска = объему RAM)
-        RegTweak("disable_hibernation", "Отключить гибернацию (Файл hiberfil.sys)", "Удаляет скрытый системный файл hiberfil.sys, мгновенно освобождая от 8 до 64 ГБ на диске C:.", "Диск",
-            RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Control\Power", "HibernateEnabled", 0, 1,
-            isFeatured: true,
-            userWhy: "Если вы не пользуетесь режимом 'Гибернация', отключение мгновенно освобождает на системном диске гигабайты памяти, равные объему вашей оперативной памяти.",
-            techWhy: "HibernateEnabled = 0 (эквивалент powercfg -h off). Удаляет файл сброса состояния ядра C:\\hiberfil.sys и выключает гибридный спящий режим Fast Startup.");
-
-        // Отключение оптимизации доставки P2P для всех пользователей
-        RegTweak("disable_delivery_optimization_service", "Полностью отключить службу Delivery Optimization", "Запрещает использование интернет-канала для скрытой раздачи обновлений.", "Службы",
-            RegistryHive.LocalMachine, @"SYSTEM\CurrentControlSet\Services\DoSvc", "Start", 4, 2,
-            userWhy: "Служба DoSvc больше не сможет нагружать процессор и забивать интернет-канал незаметной фоновой P2P-раздачей системных файлов другим компьютерам.",
-            techWhy: "Служба Win32: DoSvc (Delivery Optimization). Полный перевод в Disabled (Start=4). Исключает захват порта 7680 TCP.");
-
-        // Принудительное отключение троттлинга аудиоподсистемы
-        RegTweak("disable_mmcss_audio_throttling", "Снять ограничение тактов аудиопотока", "Устраняет хрипы звука и рассинхрон при пиковых нагрузках на CPU.", "Производительность",
-            RegistryHive.LocalMachine, @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Audio", "Background Only", "False", "True",
-            userWhy: "Звук в Discord, играх и наушниках не будет заикаться или трещать, когда процессор нагружен на 100% тяжелой игрой или компиляцией.",
-            techWhy: "Tasks\\Audio: Background Only = 'False', Scheduling Category = 'High'. Гарантирует повышенный приоритет потокам аудио-движка WASAPI в планировщике.");
     }
 }

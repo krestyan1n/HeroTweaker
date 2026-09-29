@@ -1,9 +1,11 @@
-﻿using System.Collections.Specialized;
+﻿using System;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Threading;
 using HeroTweaker.Core.Models;
-using HeroTweaker.Core.Services;
 using HeroTweaker.ViewModels;
 
 namespace HeroTweaker;
@@ -14,44 +16,133 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
-        // 1. Создаем ViewModel и привязываем контекст данных
-        var vm = new MainViewModel();
-        DataContext = vm;
+        DataContext = new MainViewModel();
 
-        // 2. Применяем сохраненную тему к окну
-        ThemeService.ApplyTheme(vm.SelectedThemeId);
-
-        // 3. Безопасная автопрокрутка терминала логов
-        ((INotifyCollectionChanged)vm.ConsoleLogs).CollectionChanged += (_, _) =>
+        Loaded += (s, e) =>
         {
-            Dispatcher.InvokeAsync(() =>
+            if (DataContext is MainViewModel vm)
             {
-                var scroller = FindName("ConsoleScroller") as ScrollViewer;
-                scroller?.ScrollToEnd();
-            });
+                vm.PropertyChanged += OnViewModelPropertyChanged;
+            }
         };
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainViewModel.SelectedCategory))
+        {
+            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+            {
+                TweaksScrollViewer?.ScrollToTop();
+                DashboardScrollViewer?.ScrollToTop();
+                NetworkScrollViewer?.ScrollToTop();
+                DeveloperScrollViewer?.ScrollToTop();
+                StartupScrollViewer?.ScrollToTop();
+                SettingsScrollViewer?.ScrollToTop();
+                CatalogScrollViewer?.ScrollToTop();
+                InstalledScrollViewer?.ScrollToTop();
+                RestoreScrollViewer?.ScrollToTop();
+                DiskListScrollViewer?.ScrollToTop();
+                DiskCleanupScrollViewer?.ScrollToTop();
+            });
+        }
+        else if (e.PropertyName == nameof(MainViewModel.HoveredDiskItem))
+        {
+            if (DataContext is MainViewModel vm)
+            {
+                HighlightHoveredDiskRow(vm.HoveredDiskItem, vm.CurrentDiskPath);
+            }
+        }
+    }
+
+    // Подсветка строки в правом списке папок
+    private void HighlightHoveredDiskRow(DiskItemModel? hovered, string currentRootPath)
+    {
+        var listControl = FindName("Level1ItemsControl") as ItemsControl
+            ?? (DiskListScrollViewer != null ? FindVisualChild<ItemsControl>(DiskListScrollViewer) : null);
+
+        if (listControl == null) return;
+
+        for (int i = 0; i < listControl.Items.Count; i++)
+        {
+            var container = listControl.ItemContainerGenerator.ContainerFromIndex(i) as FrameworkElement;
+            if (container == null) continue;
+
+            var border = container as Border ?? FindVisualChild<Border>(container);
+            if (border == null) continue;
+
+            var item = listControl.Items[i] as DiskItemModel;
+            bool isMatch = false;
+
+            if (hovered != null && item != null)
+            {
+                if (ReferenceEquals(hovered, item) ||
+                    string.Equals(hovered.FullPath, item.FullPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    isMatch = true;
+                }
+                else if (item.IsFolder &&
+                         !string.IsNullOrEmpty(item.FullPath) &&
+                         !string.IsNullOrEmpty(hovered.FullPath) &&
+                         !string.Equals(item.FullPath.TrimEnd('\\'), currentRootPath.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
+                {
+                    string parentPrefix = item.FullPath.TrimEnd('\\') + "\\";
+                    if (hovered.FullPath.StartsWith(parentPrefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        isMatch = true;
+                    }
+                }
+            }
+
+            if (isMatch)
+            {
+                border.Background = new SolidColorBrush(Color.FromArgb(0x38, 0x38, 0xBD, 0xF8));
+                border.BorderBrush = (Brush)FindResource("CyanAccentBrush");
+                border.BringIntoView();
+            }
+            else
+            {
+                border.Background = (Brush)FindResource("CardBgBrush");
+                border.BorderBrush = (Brush)FindResource("BorderBrush");
+            }
+        }
+    }
+
+    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T typed) return typed;
+            var found = FindVisualChild<T>(child);
+            if (found != null) return found;
+        }
+        return null;
     }
 
     private void DriveSelectButton_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is Button btn && btn.ContextMenu != null)
+        if (sender is Button btn && DataContext is MainViewModel vm)
         {
-            btn.ContextMenu.PlacementTarget = btn;
-            btn.ContextMenu.IsOpen = true;
-        }
-    }
-
-    private void OpenRowContextMenu_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is Button btn && btn.DataContext is DiskItemModel item)
-        {
-            var menu = FindResource("DiskItemContextMenu") as ContextMenu;
-            if (menu != null)
+            var menu = new ContextMenu();
+            foreach (var d in vm.AvailableDrives)
             {
-                menu.PlacementTarget = btn;
-                menu.Tag = item;
-                menu.IsOpen = true;
+                var item = new MenuItem
+                {
+                    Header = d.DisplayName,
+                    Tag = d.RootPath
+                };
+                item.Click += async (s, args) =>
+                {
+                    if (s is MenuItem mi && mi.Tag is string root)
+                    {
+                        await vm.NavigateDiskToPathAsync(root);
+                    }
+                };
+                menu.Items.Add(item);
             }
+            menu.PlacementTarget = btn;
+            menu.IsOpen = true;
         }
     }
 
