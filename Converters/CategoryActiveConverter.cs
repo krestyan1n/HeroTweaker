@@ -7,8 +7,8 @@ namespace HeroTweaker.Converters;
 
 public class CategoryActiveConverter : IMultiValueConverter
 {
-    private static readonly SolidColorBrush ActiveBrush = new((Color)ColorConverter.ConvertFromString("#6366F1"));
-    private static readonly SolidColorBrush InactiveBrush = new((Color)ColorConverter.ConvertFromString("#17171D"));
+    private static readonly SolidColorBrush ActiveBrush = new((Color)ColorConverter.ConvertFromString("#263238"));
+    private static readonly SolidColorBrush InactiveBrush = Brushes.Transparent;
 
     public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
     {

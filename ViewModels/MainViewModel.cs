@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Win32;
 using HeroTweaker.Core.Interfaces;
@@ -20,6 +21,32 @@ using HeroTweaker.Core.Services;
 using HeroTweaker.ViewModels.Base;
 
 namespace HeroTweaker.ViewModels;
+
+public class DriveSelectModel
+{
+    public string RootPath { get; set; } = string.Empty;
+    public string VolumeLabel { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string TotalSize { get; set; } = string.Empty;
+    public string AvailableFreeSpace { get; set; } = string.Empty;
+    public double UsedPercentage { get; set; }
+
+    public double UsedRatio => Math.Clamp(UsedPercentage / 100.0, 0.005, 1.0);
+
+    public DriveSelectModel() { }
+
+    public DriveSelectModel(string rootPath, string volumeLabel, string displayName, string totalSize, string availableFreeSpace, double usedPercentage)
+    {
+        RootPath = rootPath;
+        VolumeLabel = volumeLabel;
+        DisplayName = displayName;
+        TotalSize = totalSize;
+        AvailableFreeSpace = availableFreeSpace;
+        UsedPercentage = usedPercentage;
+    }
+}
+
+public record HealthPenaltyItem(string Title, string ImpactText, string Category, Action FixAction);
 
 public class MainViewModel : ObservableObject
 {
@@ -41,6 +68,17 @@ public class MainViewModel : ObservableObject
     [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GlobalMemoryStatusEx([In, Out] MEMORYSTATUSEX lpBuffer);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetSystemTimes(out System.Runtime.InteropServices.ComTypes.FILETIME lpIdleTime, out System.Runtime.InteropServices.ComTypes.FILETIME lpKernelTime, out System.Runtime.InteropServices.ComTypes.FILETIME lpUserTime);
+
+    private static ulong FileTimeToUInt64(System.Runtime.InteropServices.ComTypes.FILETIME ft) =>
+        ((ulong)ft.dwHighDateTime << 32) | (uint)ft.dwLowDateTime;
+
+    private ulong _prevIdleTime;
+    private ulong _prevKernelTime;
+    private ulong _prevUserTime;
 
     [DllImport("psapi.dll")]
     private static extern int EmptyWorkingSet(IntPtr hwProc);
@@ -115,6 +153,58 @@ public class MainViewModel : ObservableObject
         _ => "Управление и глубокая оптимизация параметров операционной системы"
     };
 
+    // === ТЕЛЕМЕТРИЯ, SPARKLINE И СХЕМА ПИТАНИЯ ===
+    private double _realTimeCpuUsage = 14.0;
+    public double RealTimeCpuUsage { get => _realTimeCpuUsage; set => SetField(ref _realTimeCpuUsage, value); }
+
+    private double _realTimeRamUsage = 38.0;
+    public double RealTimeRamUsage { get => _realTimeRamUsage; set => SetField(ref _realTimeRamUsage, value); }
+
+    private string _ramDetailsFormatted = "0 ГБ / 0 ГБ";
+    public string RamDetailsFormatted { get => _ramDetailsFormatted; set => SetField(ref _ramDetailsFormatted, value); }
+
+    private PathGeometry? _cpuChartGeometry;
+    public PathGeometry? CpuChartGeometry { get => _cpuChartGeometry; set => SetField(ref _cpuChartGeometry, value); }
+
+    private PathGeometry? _ramChartGeometry;
+    public PathGeometry? RamChartGeometry { get => _ramChartGeometry; set => SetField(ref _ramChartGeometry, value); }
+
+    private readonly List<double> _cpuHistory = new();
+    private readonly List<double> _ramHistory = new();
+
+    private string _activePowerPlanName = "Сбалансированная";
+    public string ActivePowerPlanName { get => _activePowerPlanName; set => SetField(ref _activePowerPlanName, value); }
+
+    public ICommand EnableUltimatePerformanceCommand { get; }
+
+    // === АВАРИЙНЫЕ СИСТЕМНЫЕ ИНСТРУМЕНТЫ ===
+    public ICommand RunSfcScanCommand { get; }
+    public ICommand RunDismRestoreCommand { get; }
+
+    // === ДЕТАЛИЗАЦИЯ HEALTH SCORE ===
+    private int _systemHealthScore = 70;
+    public int SystemHealthScore { get => _systemHealthScore; set => SetField(ref _systemHealthScore, value); }
+
+    private string _systemHealthStatusText = "Анализ состояния системы...";
+    public string SystemHealthStatusText { get => _systemHealthStatusText; set => SetField(ref _systemHealthStatusText, value); }
+
+    private bool _isHealthDetailsOpen;
+    public bool IsHealthDetailsOpen { get => _isHealthDetailsOpen; set => SetField(ref _isHealthDetailsOpen, value); }
+
+    public ObservableCollection<HealthPenaltyItem> HealthPenaltyItems { get; } = new();
+    public ICommand ToggleHealthDetailsCommand { get; }
+
+    private int _activeTweaksCount;
+    public int ActiveTweaksCount { get => _activeTweaksCount; set => SetField(ref _activeTweaksCount, value); }
+
+    private int _disabledServicesCount;
+    public int DisabledServicesCount { get => _disabledServicesCount; set => SetField(ref _disabledServicesCount, value); }
+
+    private string _freedSpaceFormatted = "0 МБ";
+    public string FreedSpaceFormatted { get => _freedSpaceFormatted; set => SetField(ref _freedSpaceFormatted, value); }
+
+    public ObservableCollection<RecommendationModel> SystemRecommendations { get; } = new();
+
     // === СЕТЬ: АДАПТЕРЫ И DNS ===
     public ObservableCollection<NetworkAdapterInfo> AvailableAdapters { get; } = new();
 
@@ -159,7 +249,7 @@ public class MainViewModel : ObservableObject
                 OnPropertyChanged(nameof(IsDiskTreeSubTabVisible));
                 OnPropertyChanged(nameof(IsDiskCleanupSubTabVisible));
 
-                if (value == 1 && CleanupCategories.All(c => c.SizeBytes == 0))
+                if (value == 1)
                 {
                     _ = RefreshCleanupScanAsync();
                 }
@@ -195,11 +285,30 @@ public class MainViewModel : ObservableObject
     private string _currentDiskPath = @"C:\";
     public string CurrentDiskPath { get => _currentDiskPath; set => SetField(ref _currentDiskPath, value); }
 
-    private string _currentDiskFolderName = "Локальный диск (C:)";
-    public string CurrentDiskFolderName { get => _currentDiskFolderName; set => SetField(ref _currentDiskFolderName, value); }
+    private string _currentDiskFolderName = "C:\\";
+    public string CurrentDiskFolderName
+    {
+        get => _currentDiskFolderName;
+        set
+        {
+            if (SetField(ref _currentDiskFolderName, value))
+                OnPropertyChanged(nameof(FolderNameText));
+        }
+    }
 
-    private string _currentDiskTotalFormatted = "Загрузка...";
-    public string CurrentDiskTotalFormatted { get => _currentDiskTotalFormatted; set => SetField(ref _currentDiskTotalFormatted, value); }
+    private string _currentDiskTotalFormatted = "0 Б";
+    public string CurrentDiskTotalFormatted
+    {
+        get => _currentDiskTotalFormatted;
+        set
+        {
+            if (SetField(ref _currentDiskTotalFormatted, value))
+                OnPropertyChanged(nameof(TotalSizeText));
+        }
+    }
+
+    public string TotalSizeText => CurrentDiskTotalFormatted;
+    public string FolderNameText => CurrentDiskFolderName;
 
     private bool _isDiskScanning;
     public bool IsDiskScanning { get => _isDiskScanning; set => SetField(ref _isDiskScanning, value); }
@@ -318,30 +427,6 @@ public class MainViewModel : ObservableObject
         }
     }
 
-    // === ТЕЛЕМЕТРИЯ & HEALTH SCORE ===
-    private double _realTimeCpuUsage = 14.0;
-    public double RealTimeCpuUsage { get => _realTimeCpuUsage; set => SetField(ref _realTimeCpuUsage, value); }
-
-    private double _realTimeRamUsage = 38.0;
-    public double RealTimeRamUsage { get => _realTimeRamUsage; set => SetField(ref _realTimeRamUsage, value); }
-
-    private int _systemHealthScore = 70;
-    public int SystemHealthScore { get => _systemHealthScore; set => SetField(ref _systemHealthScore, value); }
-
-    private string _systemHealthStatusText = "Анализ состояния системы...";
-    public string SystemHealthStatusText { get => _systemHealthStatusText; set => SetField(ref _systemHealthStatusText, value); }
-
-    private int _activeTweaksCount;
-    public int ActiveTweaksCount { get => _activeTweaksCount; set => SetField(ref _activeTweaksCount, value); }
-
-    private int _disabledServicesCount;
-    public int DisabledServicesCount { get => _disabledServicesCount; set => SetField(ref _disabledServicesCount, value); }
-
-    private string _freedSpaceFormatted = "0 МБ";
-    public string FreedSpaceFormatted { get => _freedSpaceFormatted; set => SetField(ref _freedSpaceFormatted, value); }
-
-    public ObservableCollection<RecommendationModel> SystemRecommendations { get; } = new();
-
     // === АУДИТ ===
     public ObservableCollection<TransactionRecord> AuditHistory { get; } = new();
 
@@ -419,12 +504,20 @@ public class MainViewModel : ObservableObject
                 OnPropertyChanged(nameof(CategorySubtitle));
                 FilteredTweaks.Refresh();
 
-                if (value == "Диск")
+                if (value == "Информация")
+                {
+                    RefreshAvailableDrives();
+                    RefreshPowerPlan();
+                    _ = RecalculateHealthScoreAsync();
+                }
+                else if (value == "Диск")
                 {
                     RefreshAvailableDrives();
                     CheckDiskCachePrompt();
                     if (DiskSubTabIndex == 0)
                         _ = NavigateDiskToPathAsync(CurrentDiskPath);
+                    else
+                        _ = RefreshCleanupScanAsync();
                 }
                 else if (value == "Developer" && DevComponents.Count == 0)
                 {
@@ -513,6 +606,95 @@ public class MainViewModel : ObservableObject
     {
         OpenUpdateUrlCommand = new RelayCommand(() => UpdateCheckerService.OpenReleaseUrl(ReleaseUrl));
         DismissUpdateCommand = new RelayCommand(() => HasUpdateAvailable = false);
+
+        ToggleHealthDetailsCommand = new RelayCommand(() => IsHealthDetailsOpen = !IsHealthDetailsOpen);
+
+        EnableUltimatePerformanceCommand = new RelayCommand(async () =>
+        {
+            IsGlobalBusy = true;
+            StatusMessage = "Активация схемы питания «Максимальная производительность»...";
+            try
+            {
+                await Task.Run(() =>
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = "powercfg",
+                        Arguments = "-duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61",
+                        CreateNoWindow = true,
+                        UseShellExecute = false
+                    })?.WaitForExit(2000);
+
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = "powercfg",
+                        Arguments = "/setactive e9a42b02-d5df-448d-aa00-03f14749eb61",
+                        CreateNoWindow = true,
+                        UseShellExecute = false
+                    })?.WaitForExit(2000);
+                });
+
+                RefreshPowerPlan();
+                MessageBox.Show("Режим «Максимальная производительность» (Ultimate Performance) успешно активирован!\nПарковка ядер процессора отключена.", "Электропитание", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка настройки питания: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                IsGlobalBusy = false;
+                StatusMessage = string.Empty;
+            }
+        });
+
+        RunSfcScanCommand = new RelayCommand(async () =>
+        {
+            IsGlobalBusy = true;
+            IsProgressIndeterminate = true;
+            StatusMessage = "Проверка целостности системных файлов (SFC Scan)...";
+            try
+            {
+                await Task.Run(() =>
+                {
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = "sfc.exe",
+                        Arguments = "/scannow",
+                        CreateNoWindow = true,
+                        UseShellExecute = false
+                    };
+                    var p = Process.Start(psi);
+                    p?.WaitForExit();
+                });
+                MessageBox.Show("Проверка целостности системы (sfc /scannow) успешно завершена!", "SFC Scan", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            finally { IsGlobalBusy = false; StatusMessage = string.Empty; IsProgressIndeterminate = false; }
+        });
+
+        RunDismRestoreCommand = new RelayCommand(async () =>
+        {
+            IsGlobalBusy = true;
+            IsProgressIndeterminate = true;
+            StatusMessage = "Восстановление хранилища компонентов DISM...";
+            try
+            {
+                await Task.Run(() =>
+                {
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = "dism.exe",
+                        Arguments = "/online /cleanup-image /restorehealth",
+                        CreateNoWindow = true,
+                        UseShellExecute = false
+                    };
+                    var p = Process.Start(psi);
+                    p?.WaitForExit();
+                });
+                MessageBox.Show("Восстановление системного образа DISM успешно завершено!", "DISM Restore", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            finally { IsGlobalBusy = false; StatusMessage = string.Empty; IsProgressIndeterminate = false; }
+        });
 
         FilteredTweaks = CollectionViewSource.GetDefaultView(_allTweaks);
         FilteredTweaks.Filter = obj =>
@@ -894,37 +1076,60 @@ public class MainViewModel : ObservableObject
 
         ApplyAllRecommendationsCommand = new RelayCommand(async () =>
         {
-            var targetTweaks = DashboardTweaks.Where(t => t.HasPendingChange).ToList();
+            if (IsGlobalBusy) return;
+
+            var targetTweaks = DashboardTweaks.Where(t => !t.CurrentState || t.HasPendingChange).ToList();
 
             if (targetTweaks.Count == 0)
             {
-                foreach (var t in DashboardTweaks.Where(t => !t.CurrentState))
-                {
-                    t.TargetState = true;
-                }
-                targetTweaks = DashboardTweaks.Where(t => t.HasPendingChange).ToList();
+                targetTweaks = _allTweaks.Where(t => !t.CurrentState && t.Risk == RiskLevel.Safe && t.Category != "Интерфейс").Take(5).ToList();
             }
 
-            if (targetTweaks.Count == 0) return;
+            if (targetTweaks.Count == 0)
+            {
+                MessageBox.Show("Все ключевые рекомендуемые твики уже активированы и система максимально оптимизирована!", "Оптимизация", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
 
             IsGlobalBusy = true;
-            StatusMessage = "Применение твиков вкладки Информация...";
+            ProgressValue = 0;
+            IsProgressIndeterminate = false;
+            StatusMessage = "Применение рекомендуемых твиков...";
+
             try
             {
+                int total = targetTweaks.Count;
+                int current = 0;
+
                 foreach (var tw in targetTweaks)
                 {
+                    tw.TargetState = true;
+                    StatusMessage = $"Применение: {tw.Name}...";
+
                     var record = await tw.CommitChangeWithTransactionAsync();
                     if (record != null)
                     {
                         await TransactionManager.CommitTransactionAsync(record);
                     }
+
+                    current++;
+                    ProgressValue = (double)current / total * 100;
+                    await Task.Delay(40);
                 }
 
                 foreach (var t in _allTweaks) t.RefreshState();
                 RefreshAuditHistory();
+
                 await RecalculateHealthScoreAsync();
-                StatusMessage = "Твики успешно применены!";
+
+                StatusMessage = "Рекомендуемые твики успешно активированы!";
                 await Task.Delay(300);
+
+                MessageBox.Show($"Успешно применены и оптимизированы {total} параметров системы!", "Оптимизация завершена", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка применения твиков: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally
             {
@@ -932,8 +1137,9 @@ public class MainViewModel : ObservableObject
                 StatusMessage = string.Empty;
                 OnPropertyChanged(nameof(PendingCount));
                 OnPropertyChanged(nameof(HasPendingChanges));
+                CommandManager.InvalidateRequerySuggested();
             }
-        }, () => !IsGlobalBusy);
+        });
 
         ScanDeveloperDoctorCommand = new RelayCommand(async () =>
         {
@@ -1120,7 +1326,11 @@ public class MainViewModel : ObservableObject
             try
             {
                 if (p is string path && Directory.Exists(path))
+                {
+                    SelectedCategory = "Диск";
+                    DiskSubTabIndex = 0;
                     await NavigateDiskToPathAsync(path);
+                }
             }
             catch (Exception ex) { AddLog($"Диск недоступен: {ex.Message}", LogLevel.Warning); }
         });
@@ -1176,24 +1386,166 @@ public class MainViewModel : ObservableObject
         {
             try
             {
+                string? targetPath = null;
+                string? itemName = null;
+
                 if (p is DiskItemModel item)
                 {
-                    var res = MessageBox.Show($"Переместить в Корзину?\n\n{item.FullPath}", "Удаление", MessageBoxButton.YesNo, MessageBoxImage.Question);
-                    if (res == MessageBoxResult.Yes && DiskAnalyzerService.MoveToRecycleBin(item.FullPath))
+                    targetPath = item.FullPath;
+                    itemName = item.Name;
+                }
+                else if (p is string pathStr)
+                {
+                    targetPath = pathStr;
+                    itemName = Path.GetFileName(pathStr);
+                }
+
+                if (!IsSafeDiskDeletionTarget(p as DiskItemModel, targetPath)) return;
+
+                var res = MessageBox.Show(
+                    $"Вы действительно хотите переместить в Корзину?\n\n{targetPath}",
+                    "Перемещение в Корзину",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+
+                if (res == MessageBoxResult.Yes)
+                {
+                    IsGlobalBusy = true;
+                    StatusMessage = $"Перемещение в корзину: {itemName}...";
+
+                    bool success = await Task.Run(() =>
+                    {
+                        try
+                        {
+                            if (Directory.Exists(targetPath))
+                            {
+                                Microsoft.VisualBasic.FileIO.FileSystem.DeleteDirectory(
+                                    targetPath,
+                                    Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,
+                                    Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
+                                return true;
+                            }
+                            if (File.Exists(targetPath))
+                            {
+                                Microsoft.VisualBasic.FileIO.FileSystem.DeleteFile(
+                                    targetPath,
+                                    Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,
+                                    Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
+                                return true;
+                            }
+                        }
+                        catch { }
+                        return false;
+                    });
+
+                    if (success)
+                    {
+                        DiskCacheService.ClearAllCache();
                         await NavigateDiskToPathAsync(CurrentDiskPath, forceRefresh: true);
+                        RefreshAvailableDrives();
+                    }
+                    else
+                    {
+                        MessageBox.Show(
+                            $"Не удалось переместить в Корзину:\n{targetPath}\n\nВозможно, файл заблокирован другим процессом или требуются права Администратора.",
+                            "Ошибка удаления",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Warning);
+                    }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                IsGlobalBusy = false;
+                StatusMessage = string.Empty;
+            }
         });
 
         RefreshAvailableDrives();
         RefreshNetworkAdapters();
+        RefreshPowerPlan();
         RegisterTweaks();
         RefreshAuditHistory();
+        RebuildBreadcrumbs(CurrentDiskPath);
         StartRealTimeTelemetry();
 
-        // Запуск контролируемого и плавного сплеш-скрина
-        _ = InitializeAppAsync();
+    }
+
+    private bool _initializationStarted;
+
+    public Task StartInitializationAsync()
+    {
+        if (_initializationStarted) return Task.CompletedTask;
+        _initializationStarted = true;
+        return InitializeAppAsync();
+    }
+
+    public async Task ApplySingleTweakImmediateAsync(TweakViewModel tw)
+    {
+        if (IsGlobalBusy) return;
+
+        IsGlobalBusy = true;
+        StatusMessage = $"Применение: {tw.Name}...";
+
+        try
+        {
+            tw.TargetState = true;
+            var record = await tw.CommitChangeWithTransactionAsync();
+            if (record != null)
+            {
+                await TransactionManager.CommitTransactionAsync(record);
+            }
+
+            tw.RefreshState();
+            RefreshAuditHistory();
+            await RecalculateHealthScoreAsync();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Ошибка применения твика: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            IsGlobalBusy = false;
+            StatusMessage = string.Empty;
+            OnPropertyChanged(nameof(PendingCount));
+            OnPropertyChanged(nameof(HasPendingChanges));
+            CommandManager.InvalidateRequerySuggested();
+        }
+    }
+
+    private void RefreshPowerPlan()
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "powercfg",
+                Arguments = "/getactivescheme",
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var p = Process.Start(psi);
+            if (p != null)
+            {
+                string line = p.StandardOutput.ReadToEnd();
+                p.WaitForExit(1000);
+                int openIdx = line.IndexOf('(');
+                int closeIdx = line.IndexOf(')');
+                if (openIdx >= 0 && closeIdx > openIdx)
+                {
+                    ActivePowerPlanName = line.Substring(openIdx + 1, closeIdx - openIdx - 1);
+                    return;
+                }
+            }
+        }
+        catch { }
+        ActivePowerPlanName = "Сбалансированная";
     }
 
     private void RefreshNetworkAdapters()
@@ -1306,16 +1658,45 @@ public class MainViewModel : ObservableObject
     {
         try
         {
-            var report = await SystemHealthService.AnalyzeSystemHealthAsync(_allTweaks);
+            var relevantTweaks = _allTweaks.Where(t => t.Category != "Интерфейс").ToList();
+            var report = await SystemHealthService.AnalyzeSystemHealthAsync(relevantTweaks);
+
             SystemHealthScore = report.Score;
             SystemHealthStatusText = report.StatusText;
-            ActiveTweaksCount = report.ActiveTweaksCount;
+            ActiveTweaksCount = _allTweaks.Count(t => t.CurrentState);
             DisabledServicesCount = report.DisabledServicesCount;
             FreedSpaceFormatted = report.CleanableSpaceFormatted;
 
             SystemRecommendations.Clear();
             foreach (var r in report.Recommendations)
                 SystemRecommendations.Add(r);
+
+            Application.Current?.Dispatcher?.Invoke(() =>
+            {
+                HealthPenaltyItems.Clear();
+                var penalties = relevantTweaks.Where(t => !t.CurrentState).ToList();
+
+                if (penalties.Count == 0)
+                {
+                    HealthPenaltyItems.Add(new HealthPenaltyItem(
+                        "Все ключевые параметры оптимизированы",
+                        "0% штрафа",
+                        "Система",
+                        () => { }
+                    ));
+                }
+                else
+                {
+                    foreach (var tw in penalties)
+                    {
+                        HealthPenaltyItems.Add(new HealthPenaltyItem(
+                            tw.Name,
+                            tw.Risk == RiskLevel.Safe ? "-5% к оптимизации" : "-2% (Продвинутый)",
+                            tw.Category,
+                            () => { _ = ApplySingleTweakImmediateAsync(tw); }));
+                    }
+                }
+            });
         }
         catch { }
     }
@@ -1368,11 +1749,13 @@ public class MainViewModel : ObservableObject
     {
         if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path)) return;
 
+        CancellationTokenSource? scanCts = null;
         try
         {
             _diskScanCts?.Cancel();
-            _diskScanCts = new CancellationTokenSource();
-            var ct = _diskScanCts.Token;
+            scanCts = new CancellationTokenSource();
+            _diskScanCts = scanCts;
+            var ct = scanCts.Token;
 
             IsDiskScanning = true;
             CurrentDiskPath = path;
@@ -1387,7 +1770,7 @@ public class MainViewModel : ObservableObject
                 var cached = await DiskCacheService.LoadSnapshotAsync(path);
                 if (cached.HasValue)
                 {
-                    await Task.Delay(250, ct);
+                    await Task.Delay(200, ct);
 
                     AllSunburstSlices.Clear();
                     foreach (var s in cached.Value.Slices) AllSunburstSlices.Add(s);
@@ -1424,9 +1807,24 @@ public class MainViewModel : ObservableObject
         }
         finally
         {
-            IsDiskScanning = false;
+            if (scanCts != null && ReferenceEquals(_diskScanCts, scanCts))
+            {
+                IsDiskScanning = false;
+                _diskScanCts = null;
+            }
+            scanCts?.Dispose();
             OnPropertyChanged(nameof(CanGoUpDisk));
         }
+    }
+
+    private static bool IsSafeDiskDeletionTarget(DiskItemModel? item, string? path)
+    {
+        if (item?.IsSynthetic == true || string.IsNullOrWhiteSpace(path)) return false;
+
+        string normalizedPath = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        string normalizedRoot = (Path.GetPathRoot(path) ?? string.Empty)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return !string.Equals(normalizedPath, normalizedRoot, StringComparison.OrdinalIgnoreCase);
     }
 
     public void RefreshAvailableDrives()
@@ -1440,10 +1838,12 @@ public class MainViewModel : ObservableObject
                 string root = d.RootDirectory.FullName;
                 string total = DiskItemModel.FormatBytes(d.TotalSize);
                 string free = DiskItemModel.FormatBytes(d.AvailableFreeSpace);
-                double freePct = Math.Round((double)d.AvailableFreeSpace / d.TotalSize * 100, 1);
 
-                string display = $"{d.Name.TrimEnd('\\')} ({label})  [{free} свободно из {total}]";
-                AvailableDrives.Add(new DriveSelectModel(root, label, display, total, free, freePct));
+                double usedBytes = (double)(d.TotalSize - d.AvailableFreeSpace);
+                double usedPercentage = Math.Round((usedBytes / d.TotalSize) * 100.0, 1);
+
+                string display = $"{d.Name.TrimEnd('\\')} ({label})";
+                AvailableDrives.Add(new DriveSelectModel(root, label, display, total, free, usedPercentage));
             }
         }
         catch { }
@@ -1494,7 +1894,18 @@ public class MainViewModel : ObservableObject
 
     private void StartRealTimeTelemetry()
     {
-        _telemetryTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
+        GetSystemTimes(out var iTime, out var kTime, out var uTime);
+        _prevIdleTime = FileTimeToUInt64(iTime);
+        _prevKernelTime = FileTimeToUInt64(kTime);
+        _prevUserTime = FileTimeToUInt64(uTime);
+
+        for (int i = 0; i < 35; i++)
+        {
+            _cpuHistory.Add(15);
+            _ramHistory.Add(40);
+        }
+
+        _telemetryTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.0) };
         _telemetryTimer.Tick += (_, _) =>
         {
             try
@@ -1502,14 +1913,80 @@ public class MainViewModel : ObservableObject
                 var mem = new MEMORYSTATUSEX();
                 if (GlobalMemoryStatusEx(mem))
                 {
-                    double used = (double)(mem.ullTotalPhys - mem.ullAvailPhys) / mem.ullTotalPhys * 100.0;
-                    RealTimeRamUsage = Math.Round(used, 0);
+                    double usedBytes = (double)(mem.ullTotalPhys - mem.ullAvailPhys);
+                    double totalBytes = (double)mem.ullTotalPhys;
+                    double usedGb = usedBytes / (1024.0 * 1024.0 * 1024.0);
+                    double totalGb = totalBytes / (1024.0 * 1024.0 * 1024.0);
+
+                    RealTimeRamUsage = Math.Round((usedBytes / totalBytes) * 100.0, 0);
+                    RamDetailsFormatted = $"{usedGb:F1} ГБ / {totalGb:F1} ГБ";
                 }
-                RealTimeCpuUsage = Math.Round(12.0 + (DateTime.Now.Millisecond % 30), 0);
+
+                if (GetSystemTimes(out var idleFt, out var kernelFt, out var userFt))
+                {
+                    ulong idle = FileTimeToUInt64(idleFt);
+                    ulong kernel = FileTimeToUInt64(kernelFt);
+                    ulong user = FileTimeToUInt64(userFt);
+
+                    ulong usrDiff = user - _prevUserTime;
+                    ulong kerDiff = kernel - _prevKernelTime;
+                    ulong idlDiff = idle - _prevIdleTime;
+
+                    ulong sysTotal = usrDiff + kerDiff;
+                    if (sysTotal > 0)
+                    {
+                        double cpu = (double)(sysTotal - idlDiff) / sysTotal * 100.0;
+                        RealTimeCpuUsage = Math.Clamp(Math.Round(cpu, 0), 1.0, 100.0);
+                    }
+
+                    _prevIdleTime = idle;
+                    _prevKernelTime = kernel;
+                    _prevUserTime = user;
+                }
+
+                _cpuHistory.Add(RealTimeCpuUsage);
+                if (_cpuHistory.Count > 35) _cpuHistory.RemoveAt(0);
+
+                _ramHistory.Add(RealTimeRamUsage);
+                if (_ramHistory.Count > 35) _ramHistory.RemoveAt(0);
+
+                CpuChartGeometry = BuildAreaGeometry(_cpuHistory, 300, 36);
+                RamChartGeometry = BuildAreaGeometry(_ramHistory, 300, 36);
             }
             catch { }
         };
         _telemetryTimer.Start();
+    }
+
+    private static PathGeometry BuildAreaGeometry(List<double> values, double width, double height)
+    {
+        var geom = new PathGeometry();
+        if (values.Count < 2) return geom;
+
+        var figure = new PathFigure
+        {
+            StartPoint = new Point(0, height),
+            IsClosed = true,
+            IsFilled = true
+        };
+
+        double stepX = width / (values.Count - 1);
+
+        for (int i = 0; i < values.Count; i++)
+        {
+            double val = Math.Clamp(values[i], 0, 100);
+            double x = i * stepX;
+            double y = height - (val / 100.0 * (height - 4));
+            if (i == 0) figure.Segments.Add(new LineSegment(new Point(0, y), true));
+            else figure.Segments.Add(new LineSegment(new Point(x, y), true));
+        }
+
+        figure.Segments.Add(new LineSegment(new Point(width, height), true));
+        figure.Segments.Add(new LineSegment(new Point(0, height), true));
+
+        geom.Figures.Add(figure);
+        geom.Freeze();
+        return geom;
     }
 
     public void AddLog(string message, LogLevel level = LogLevel.Info)
@@ -1633,9 +2110,6 @@ public class MainViewModel : ObservableObject
     private async Task ExecuteInstallVCRuntimesAsync() =>
         await DriverService.InstallVisualCppRuntimesAsync(AddLog, p => DriverProgress = p);
 
-    // =========================================================================
-    // ПЛАВНАЯ И СТАБИЛЬНАЯ ЗАГРУЗКА СПЛЕШ-СКРИНА (~1.2 СЕК)
-    // =========================================================================
     private async Task InitializeAppAsync()
     {
         try
@@ -1643,7 +2117,7 @@ public class MainViewModel : ObservableObject
             IsAppLoading = true;
             SplashProgress = 15;
             SplashStatus = "Инициализация модулей Hero Engineering...";
-            await Task.Delay(250);
+            await Task.Delay(200);
 
             SplashProgress = 40;
             SplashStatus = "Считывание конфигурации системы и реестра...";
@@ -1651,19 +2125,19 @@ public class MainViewModel : ObservableObject
             {
                 foreach (var t in _allTweaks) t.RefreshState();
             });
-            await Task.Delay(250);
+            await Task.Delay(180);
 
             SplashProgress = 70;
             SplashStatus = "Инициализация сетевых адаптеров...";
             RefreshNetworkAdapters();
-            await Task.Delay(250);
+            await Task.Delay(180);
 
             SplashProgress = 90;
             SplashStatus = "Сбор аппаратных метрик процессора и памяти...";
             try
             {
                 var sysInfoTask = SystemInfoService.GetSystemInfoAsync();
-                if (await Task.WhenAny(sysInfoTask, Task.Delay(400)) == sysInfoTask)
+                if (await Task.WhenAny(sysInfoTask, Task.Delay(350)) == sysInfoTask)
                 {
                     SysInfo = await sysInfoTask;
                 }
@@ -1672,18 +2146,13 @@ public class MainViewModel : ObservableObject
 
             SplashProgress = 100;
             SplashStatus = "Готово к работе!";
-            await Task.Delay(300);
+            await Task.Delay(250);
         }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Init error: {ex.Message}");
-        }
+        catch { }
         finally
         {
-            // Гарантированное плавное открытие главного интерфейса
             IsAppLoading = false;
 
-            // Фоновые проверки после открытия окна (не блокируют старт)
             _ = Task.Run(async () =>
             {
                 await RecalculateHealthScoreAsync();
@@ -2303,7 +2772,7 @@ public class MainViewModel : ObservableObject
             userWhy: "Служба DoSvc больше не сможет нагружать процессор и забивать интернет-канал незаметной фоновой P2P-раздачей системных файлов другим компьютерам.",
             techWhy: "Служба Win32: DoSvc (Delivery Optimization). Полный перевод в Disabled (Start=4). Исключает захват порта 7680 TCP.");
 
-        // 4. ИНТЕРФЕЙС И ПРОВОДНИК
+        // 4. ИНТЕРФЕЙС И ПРОВОДНИК (НЕ ВЛИЯЮТ НА ЗДОРОВЬЕ СИСТЕМЫ)
         RegTweak("classic_context_menu", "Классическое меню (Windows 10)", "Возвращает классическое меню без кнопки «Показать дополнительные параметры».", "Интерфейс",
             RegistryHive.CurrentUser, @"Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32", "", "", "",
             delKey: true,

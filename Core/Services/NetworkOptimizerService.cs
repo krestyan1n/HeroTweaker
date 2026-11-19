@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using Microsoft.Win32;
@@ -96,25 +97,16 @@ public static class NetworkOptimizerService
 
     private static async Task<long> MeasureSingleDnsLatencyAsync(string ipAddress)
     {
-        try
-        {
-            using var client = new TcpClient();
-            var sw = Stopwatch.StartNew();
-            var connectTask = client.ConnectAsync(ipAddress, 53);
-            var timeoutTask = Task.Delay(1000);
+        var udpLatency = await MeasureDnsUdpLatencyAsync(ipAddress);
+        if (udpLatency > 0) return udpLatency;
 
-            if (await Task.WhenAny(connectTask, timeoutTask) == connectTask && client.Connected)
-            {
-                sw.Stop();
-                return Math.Max(1, sw.ElapsedMilliseconds);
-            }
-        }
-        catch { }
+        var tcpLatency = await MeasureDnsTcpLatencyAsync(ipAddress);
+        if (tcpLatency > 0) return tcpLatency;
 
         try
         {
             using var ping = new Ping();
-            var reply = await ping.SendPingAsync(ipAddress, 1000);
+            var reply = await ping.SendPingAsync(ipAddress, 1_200);
             if (reply.Status == IPStatus.Success)
             {
                 return Math.Max(1, reply.RoundtripTime);
@@ -124,6 +116,70 @@ public static class NetworkOptimizerService
 
         return 9999;
     }
+
+    private static async Task<long> MeasureDnsUdpLatencyAsync(string ipAddress)
+    {
+        try
+        {
+            using var client = new UdpClient(AddressFamily.InterNetwork);
+            client.Connect(ipAddress, 53);
+
+            var query = CreateDnsQuery();
+            var stopwatch = Stopwatch.StartNew();
+            await client.SendAsync(query, query.Length);
+
+            var receiveTask = client.ReceiveAsync();
+            if (await Task.WhenAny(receiveTask, Task.Delay(1_500)) != receiveTask)
+                return 0;
+
+            var response = await receiveTask;
+            stopwatch.Stop();
+
+            return response.Buffer.Length >= 12 ? Math.Max(1, stopwatch.ElapsedMilliseconds) : 0;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    private static async Task<long> MeasureDnsTcpLatencyAsync(string ipAddress)
+    {
+        try
+        {
+            using var client = new TcpClient(AddressFamily.InterNetwork);
+            var stopwatch = Stopwatch.StartNew();
+            var connectTask = client.ConnectAsync(ipAddress, 53);
+
+            if (await Task.WhenAny(connectTask, Task.Delay(1_200)) != connectTask || !client.Connected)
+                return 0;
+
+            stopwatch.Stop();
+            return Math.Max(1, stopwatch.ElapsedMilliseconds);
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    private static byte[] CreateDnsQuery()
+    {
+        var transactionId = unchecked((ushort)Interlocked.Increment(ref _dnsTransactionId));
+        return new byte[]
+        {
+            (byte)(transactionId >> 8), (byte)transactionId,
+            0x01, 0x00, // standard recursive query
+            0x00, 0x01, // one question
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x07, (byte)'e', (byte)'x', (byte)'a', (byte)'m', (byte)'p', (byte)'l', (byte)'e',
+            0x03, (byte)'c', (byte)'o', (byte)'m', 0x00,
+            0x00, 0x01, // A record
+            0x00, 0x01  // IN class
+        };
+    }
+
+    private static int _dnsTransactionId;
 
     public static List<NetworkAdapterInfo> GetAllPhysicalAdapters()
     {

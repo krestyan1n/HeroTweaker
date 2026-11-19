@@ -39,6 +39,9 @@ public class DiskItemModel : ObservableObject
         set => SetField(ref _isFolder, value);
     }
 
+    // Агрегированная строка (например, «Файлы в корне»), а не объект ФС.
+    public bool IsSynthetic { get; set; }
+
     private double _percentage;
     public double Percentage
     {

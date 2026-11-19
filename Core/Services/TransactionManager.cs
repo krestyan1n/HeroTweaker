@@ -1,9 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.ServiceProcess;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using Microsoft.Win32;
 using HeroTweaker.Core.Models.Transactions;
@@ -12,83 +13,120 @@ namespace HeroTweaker.Core.Services;
 
 public static class TransactionManager
 {
-    private static readonly string AuditDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "HeroEngineering", "HeroTweaker", "Audit");
+    private static readonly string StorageDir = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "HeroTweaker");
 
-    private static readonly string AuditFile = Path.Combine(AuditDir, "history.json");
-
-    private static readonly List<TransactionRecord> _inMemoryHistory = new();
+    private static readonly string HistoryFile = Path.Combine(StorageDir, "transactions.json");
+    private static readonly List<TransactionRecord> _history = new();
     private static readonly object _lock = new();
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true,
+        Converters = { new JsonStringEnumConverter() }
+    };
 
     static TransactionManager()
     {
-        LoadAuditHistory();
+        LoadHistory();
     }
 
-    public static StateSnapshot CreateRegistrySnapshot(RegistryHive hive, string subKeyPath, string valueName)
+    public static IReadOnlyList<TransactionRecord> GetHistory()
     {
-        var snapshot = new StateSnapshot
+        lock (_lock)
         {
-            Type = SnapshotType.Registry,
-            Hive = hive.ToString(),
-            KeyPath = subKeyPath,
-            ValueName = valueName,
-            ExistedBefore = false
-        };
+            return _history.OrderByDescending(t => t.Timestamp).ToList();
+        }
+    }
 
+    public static RegistrySnapshot? CreateRegistrySnapshot(RegistryHive hive, string subKeyPath, string valueName)
+    {
         try
         {
-            using var baseKey = RegistryKey.OpenBaseKey(hive, RegistryView.Default);
+            using var baseKey = RegistryKey.OpenBaseKey(hive, RegistryView.Registry64);
             using var key = baseKey.OpenSubKey(subKeyPath);
-            if (key != null)
-            {
-                var val = key.GetValue(valueName);
-                if (val != null)
-                {
-                    snapshot.ExistedBefore = true;
-                    snapshot.OriginalValue = val;
-                    snapshot.ValueKind = key.GetValueKind(valueName).ToString();
-                }
-            }
-        }
-        catch { }
 
-        return snapshot;
+            if (key == null)
+            {
+                return new RegistrySnapshot
+                {
+                    Hive = hive,
+                    SubKeyPath = subKeyPath,
+                    ValueName = valueName,
+                    KeyExisted = false
+                };
+            }
+
+            var kind = key.GetValueKind(valueName);
+            var val = key.GetValue(valueName, null, RegistryValueOptions.DoNotExpandEnvironmentNames);
+
+            return new RegistrySnapshot
+            {
+                Hive = hive,
+                SubKeyPath = subKeyPath,
+                ValueName = valueName,
+                OriginalValue = val,
+                ValueKind = kind,
+                KeyExisted = true
+            };
+        }
+        catch
+        {
+            return new RegistrySnapshot
+            {
+                Hive = hive,
+                SubKeyPath = subKeyPath,
+                ValueName = valueName,
+                KeyExisted = false
+            };
+        }
     }
 
-    public static StateSnapshot CreateServiceSnapshot(string serviceName)
+    public static ServiceSnapshot? CreateServiceSnapshot(string serviceName)
     {
-        var snapshot = new StateSnapshot
-        {
-            Type = SnapshotType.Service,
-            ServiceName = serviceName,
-            OriginalStartMode = 2 // 2 = Automatic, 3 = Manual, 4 = Disabled
-        };
-
         try
         {
             using var key = Registry.LocalMachine.OpenSubKey($@"SYSTEM\CurrentControlSet\Services\{serviceName}");
-            if (key?.GetValue("Start") is int mode)
-            {
-                snapshot.OriginalStartMode = mode;
-            }
-        }
-        catch { }
+            if (key == null) return null;
 
-        return snapshot;
+            int startMode = Convert.ToInt32(key.GetValue("Start", 3));
+            ServiceControllerStatus status = ServiceControllerStatus.Stopped;
+
+            try
+            {
+                using var sc = new ServiceController(serviceName);
+                status = sc.Status;
+            }
+            catch { }
+
+            return new ServiceSnapshot
+            {
+                ServiceName = serviceName,
+                OriginalStartType = (ServiceStartMode)startMode,
+                OriginalStatus = status
+            };
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     public static async Task CommitTransactionAsync(TransactionRecord record)
     {
+        if (record == null) return;
+
         lock (_lock)
         {
-            _inMemoryHistory.Insert(0, record);
-            if (_inMemoryHistory.Count > 200)
-                _inMemoryHistory.RemoveAt(_inMemoryHistory.Count - 1);
+            _history.Insert(0, record);
+            if (_history.Count > 100)
+            {
+                _history.RemoveAt(_history.Count - 1);
+            }
         }
 
-        await SaveAuditHistoryAsync();
+        await SaveHistoryAsync();
     }
 
     public static async Task<(bool Success, string Message)> RollbackTransactionAsync(Guid transactionId)
@@ -96,136 +134,150 @@ public static class TransactionManager
         TransactionRecord? record;
         lock (_lock)
         {
-            record = _inMemoryHistory.FirstOrDefault(t => t.Id == transactionId);
+            record = _history.FirstOrDefault(t => t.Id == transactionId);
         }
 
         if (record == null)
-            return (false, "Транзакция не найдена в журнале аудита.");
+            return (false, "Транзакция не найдена в истории.");
 
-        if (record.IsRolledBack)
-            return (false, "Эта операция уже была отменена ранее.");
+        if (record.TweakId == "disk_clean" || record.Snapshots.Count == 0)
+            return (false, "Данная операция очистки не подлежит откату.");
 
-        return await Task.Run(() =>
+        try
+        {
+            foreach (var snapshot in record.Snapshots)
+            {
+                if (snapshot is RegistrySnapshot regSnap)
+                {
+                    RestoreRegistrySnapshot(regSnap);
+                }
+                else if (snapshot is ServiceSnapshot srvSnap)
+                {
+                    RestoreServiceSnapshot(srvSnap);
+                }
+            }
+
+            lock (_lock)
+            {
+                _history.Remove(record);
+            }
+
+            await SaveHistoryAsync();
+            return (true, $"Откат твика «{record.TweakName}» успешно выполнен.");
+        }
+        catch (Exception ex)
+        {
+            return (false, $"Ошибка отката: {ex.Message}");
+        }
+    }
+
+    private static void RestoreRegistrySnapshot(RegistrySnapshot snap)
+    {
+        using var baseKey = RegistryKey.OpenBaseKey(snap.Hive, RegistryView.Registry64);
+
+        if (!snap.KeyExisted)
         {
             try
             {
-                foreach (var snapshot in record.Snapshots)
-                {
-                    if (snapshot.Type == SnapshotType.Registry)
-                    {
-                        RollbackRegistry(snapshot);
-                    }
-                    else if (snapshot.Type == SnapshotType.Service)
-                    {
-                        RollbackService(snapshot);
-                    }
-                }
-
-                record.IsRolledBack = true;
-                _ = SaveAuditHistoryAsync();
-                return (true, $"Откат операции «{record.TweakName}» успешно выполнен.");
+                using var key = baseKey.OpenSubKey(snap.SubKeyPath, writable: true);
+                key?.DeleteValue(snap.ValueName, throwOnMissingValue: false);
             }
-            catch (Exception ex)
-            {
-                return (false, $"Ошибка отката: {ex.Message}");
-            }
-        });
-    }
+            catch { }
+            return;
+        }
 
-    private static void RollbackRegistry(StateSnapshot snapshot)
-    {
-        if (string.IsNullOrEmpty(snapshot.Hive) || string.IsNullOrEmpty(snapshot.KeyPath)) return;
+        using var subKey = baseKey.CreateSubKey(snap.SubKeyPath, writable: true);
+        if (subKey == null) return;
 
-        var hive = Enum.Parse<RegistryHive>(snapshot.Hive);
-        using var baseKey = RegistryKey.OpenBaseKey(hive, RegistryView.Default);
-
-        if (!snapshot.ExistedBefore)
+        if (snap.OriginalValue == null)
         {
-            using var key = baseKey.OpenSubKey(snapshot.KeyPath, true);
-            if (key != null && !string.IsNullOrEmpty(snapshot.ValueName))
+            subKey.DeleteValue(snap.ValueName, throwOnMissingValue: false);
+            return;
+        }
+
+        object valueToSet = snap.OriginalValue;
+
+        if (snap.OriginalValue is JsonElement jsonElement)
+        {
+            valueToSet = snap.ValueKind switch
             {
-                try { key.DeleteValue(snapshot.ValueName, false); } catch { }
-            }
+                RegistryValueKind.DWord => jsonElement.ValueKind == JsonValueKind.Number ? jsonElement.GetInt32() : Convert.ToInt32(jsonElement.GetString()),
+                RegistryValueKind.QWord => jsonElement.ValueKind == JsonValueKind.Number ? jsonElement.GetInt64() : Convert.ToInt64(jsonElement.GetString()),
+                RegistryValueKind.String or RegistryValueKind.ExpandString => jsonElement.GetString() ?? string.Empty,
+                _ => jsonElement.ToString()
+            };
         }
         else
         {
-            using var key = baseKey.CreateSubKey(snapshot.KeyPath);
-            if (key != null && !string.IsNullOrEmpty(snapshot.ValueName) && snapshot.OriginalValue != null)
+            valueToSet = snap.ValueKind switch
             {
-                var kind = RegistryValueKind.DWord;
-                if (!string.IsNullOrEmpty(snapshot.ValueKind))
-                    Enum.TryParse(snapshot.ValueKind, out kind);
-
-                key.SetValue(snapshot.ValueName, snapshot.OriginalValue, kind);
-            }
+                RegistryValueKind.DWord => Convert.ToInt32(snap.OriginalValue),
+                RegistryValueKind.QWord => Convert.ToInt64(snap.OriginalValue),
+                RegistryValueKind.String or RegistryValueKind.ExpandString => snap.OriginalValue.ToString() ?? string.Empty,
+                _ => snap.OriginalValue
+            };
         }
+
+        subKey.SetValue(snap.ValueName, valueToSet, snap.ValueKind);
     }
 
-    private static void RollbackService(StateSnapshot snapshot)
+    private static void RestoreServiceSnapshot(ServiceSnapshot snap)
     {
-        if (string.IsNullOrEmpty(snapshot.ServiceName)) return;
+        string path = $@"SYSTEM\CurrentControlSet\Services\{snap.ServiceName}";
+        using var key = Registry.LocalMachine.CreateSubKey(path, writable: true);
+        if (key != null)
+        {
+            int modeVal = (int)snap.OriginalStartType;
+            key.SetValue("Start", modeVal, RegistryValueKind.DWord);
+        }
 
         try
         {
-            using var key = Registry.LocalMachine.OpenSubKey($@"SYSTEM\CurrentControlSet\Services\{snapshot.ServiceName}", true);
-            key?.SetValue("Start", snapshot.OriginalStartMode, RegistryValueKind.DWord);
-
-            if (snapshot.OriginalStartMode != 4)
+            using var sc = new ServiceController(snap.ServiceName);
+            if (snap.OriginalStatus == ServiceControllerStatus.Running && sc.Status != ServiceControllerStatus.Running)
             {
-                var psi = new ProcessStartInfo
-                {
-                    FileName = "sc.exe",
-                    Arguments = $"start {snapshot.ServiceName}",
-                    CreateNoWindow = true,
-                    UseShellExecute = false
-                };
-                using var p = Process.Start(psi);
-                p?.WaitForExit(1000);
+                sc.Start();
+            }
+            else if (snap.OriginalStatus == ServiceControllerStatus.Stopped && sc.Status == ServiceControllerStatus.Running)
+            {
+                sc.Stop();
             }
         }
         catch { }
     }
 
-    public static IReadOnlyList<TransactionRecord> GetHistory()
+    private static void LoadHistory()
     {
         lock (_lock)
         {
-            return _inMemoryHistory.ToList();
-        }
-    }
-
-    private static void LoadAuditHistory()
-    {
-        try
-        {
-            if (File.Exists(AuditFile))
+            try
             {
-                var json = File.ReadAllText(AuditFile);
-                var list = JsonSerializer.Deserialize<List<TransactionRecord>>(json);
-                if (list != null)
+                if (File.Exists(HistoryFile))
                 {
-                    lock (_lock)
+                    string json = File.ReadAllText(HistoryFile);
+                    var list = JsonSerializer.Deserialize<List<TransactionRecord>>(json, JsonOptions);
+                    if (list != null)
                     {
-                        _inMemoryHistory.Clear();
-                        _inMemoryHistory.AddRange(list);
+                        _history.Clear();
+                        _history.AddRange(list);
                     }
                 }
             }
+            catch { }
         }
-        catch { }
     }
 
-    private static async Task SaveAuditHistoryAsync()
+    private static async Task SaveHistoryAsync()
     {
         try
         {
-            Directory.CreateDirectory(AuditDir);
+            Directory.CreateDirectory(StorageDir);
             string json;
             lock (_lock)
             {
-                json = JsonSerializer.Serialize(_inMemoryHistory, new JsonSerializerOptions { WriteIndented = true });
+                json = JsonSerializer.Serialize(_history, JsonOptions);
             }
-            await File.WriteAllTextAsync(AuditFile, json);
+            await File.WriteAllTextAsync(HistoryFile, json);
         }
         catch { }
     }

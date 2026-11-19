@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ServiceProcess;
+using System.Text.Json.Serialization;
 using Microsoft.Win32;
 
 namespace HeroTweaker.Core.Models.Transactions;
@@ -28,22 +30,33 @@ public enum SnapshotType
 /// <summary>
 /// Точный слепок состояния системы до изменения для гарантированного отката.
 /// </summary>
-public class StateSnapshot
+// Снимки сохраняются в журнале, поэтому полиморфизм должен быть явно
+// описан для System.Text.Json.
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+[JsonDerivedType(typeof(RegistrySnapshot), "registry")]
+[JsonDerivedType(typeof(ServiceSnapshot), "service")]
+public abstract class StateSnapshot
 {
-    public SnapshotType Type { get; set; }
+    public abstract SnapshotType Type { get; }
+}
 
-    // Для Registry
-    public string? Hive { get; set; }
-    public string? KeyPath { get; set; }
-    public string? ValueName { get; set; }
+public sealed class RegistrySnapshot : StateSnapshot
+{
+    public override SnapshotType Type => SnapshotType.Registry;
+    public RegistryHive Hive { get; set; }
+    public string SubKeyPath { get; set; } = string.Empty;
+    public string ValueName { get; set; } = string.Empty;
     public object? OriginalValue { get; set; }
-    public string? ValueKind { get; set; }
-    public bool ExistedBefore { get; set; }
+    public RegistryValueKind ValueKind { get; set; }
+    public bool KeyExisted { get; set; }
+}
 
-    // Для Services
-    public string? ServiceName { get; set; }
-    public int OriginalStartMode { get; set; }
-    public string? OriginalServiceStatus { get; set; }
+public sealed class ServiceSnapshot : StateSnapshot
+{
+    public override SnapshotType Type => SnapshotType.Service;
+    public string ServiceName { get; set; } = string.Empty;
+    public ServiceStartMode OriginalStartType { get; set; }
+    public ServiceControllerStatus OriginalStatus { get; set; }
 }
 
 /// <summary>

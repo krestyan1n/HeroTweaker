@@ -4,21 +4,21 @@
              StartupUri="MainWindow.xaml">
     <Application.Resources>
         <ResourceDictionary>
-            <SolidColorBrush x:Key="WindowBgBrush" Color="#080C14" />
-            <SolidColorBrush x:Key="SidebarBgBrush" Color="#060910" />
-            <SolidColorBrush x:Key="CardBgBrush" Color="#0C111E" />
-            <SolidColorBrush x:Key="CardHoverBrush" Color="#12182B" />
-            <SolidColorBrush x:Key="BorderBrush" Color="#182236" />
-            <SolidColorBrush x:Key="CyanAccentBrush" Color="#00F0FF" />
-            <SolidColorBrush x:Key="CyanGlowBrush" Color="#38BDF8" />
-            <SolidColorBrush x:Key="TextPrimaryBrush" Color="#F8FAFC" />
-            <SolidColorBrush x:Key="TextSecondaryBrush" Color="#94A3B8" />
-            <SolidColorBrush x:Key="TextMutedBrush" Color="#64748B" />
+            <SolidColorBrush x:Key="WindowBgBrush" Color="#0B0F11" />
+            <SolidColorBrush x:Key="SidebarBgBrush" Color="#0E1315" />
+            <SolidColorBrush x:Key="CardBgBrush" Color="#131A1D" />
+            <SolidColorBrush x:Key="CardHoverBrush" Color="#1B2528" />
+            <SolidColorBrush x:Key="BorderBrush" Color="#2C393C" />
+            <SolidColorBrush x:Key="CyanAccentBrush" Color="#38BDF8" />
+            <SolidColorBrush x:Key="CyanGlowBrush" Color="#0284C7" />
+            <SolidColorBrush x:Key="TextPrimaryBrush" Color="#EAF0EE" />
+            <SolidColorBrush x:Key="TextSecondaryBrush" Color="#A7B4B1" />
+            <SolidColorBrush x:Key="TextMutedBrush" Color="#70807C" />
 
             <LinearGradientBrush x:Key="GlassBorderBrush" StartPoint="0,0" EndPoint="1,1">
-                <GradientStop Color="#4000F0FF" Offset="0.0" />
-                <GradientStop Color="#151E293B" Offset="0.5" />
-                <GradientStop Color="#250EA5E9" Offset="1.0" />
+                <GradientStop Color="#5038BDF8" Offset="0.0" />
+                <GradientStop Color="#1F2C393C" Offset="0.5" />
+                <GradientStop Color="#503A5050" Offset="1.0" />
             </LinearGradientBrush>
         </ResourceDictionary>
     </Application.Resources>

@@ -14,18 +14,18 @@ public static class DiskAnalyzerService
 {
     private static readonly string[] SunburstPalette =
     {
-        "#38BDF8", // Cyan
-        "#818CF8", // Indigo
-        "#A78BFA", // Violet
-        "#EC4899", // Pink
-        "#F43F5E", // Rose
-        "#FB923C", // Orange
-        "#FBBF24", // Amber
-        "#34D399", // Emerald
-        "#2DD4BF", // Teal
-        "#60A5FA", // Sky Blue
-        "#C084FC", // Purple
-        "#A3E635"  // Lime
+        "#38BDF8", // Sky blue
+        "#0EA5E9", // Blue
+        "#6366F1", // Indigo
+        "#14B8A6", // Teal
+        "#22D3EE", // Cyan
+        "#3B82F6", // Azure
+        "#2DD4BF", // Turquoise
+        "#818CF8", // Periwinkle
+        "#06B6D4", // Deep cyan
+        "#60A5FA", // Soft blue
+        "#5EEAD4", // Mint
+        "#4F46E5"  // Violet
     };
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
@@ -43,6 +43,87 @@ public static class DiskAnalyzerService
         public string cFileName;
         [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 14)]
         public string cAlternateFileName;
+    }
+
+    public static class RecycleBinHelper
+    {
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private struct SHFILEOPSTRUCT
+        {
+            public IntPtr hwnd;
+            public uint wFunc;
+            [MarshalAs(UnmanagedType.LPWStr)]
+            public string pFrom;
+            [MarshalAs(UnmanagedType.LPWStr)]
+            public string? pTo;
+            public ushort fFlags;
+            [MarshalAs(UnmanagedType.Bool)]
+            public bool fAnyOperationsAborted;
+            public IntPtr hNameMappings;
+            [MarshalAs(UnmanagedType.LPWStr)]
+            public string? lpszProgressTitle;
+        }
+
+        private const uint FO_DELETE = 0x0003;
+        private const ushort FOF_ALLOWUNDO = 0x0040;      // Отправлять именно в Корзину
+        private const ushort FOF_NOCONFIRMATION = 0x0010;  // Не показывать системное окно (у нас уже есть свой MessageBox)
+        private const ushort FOF_SILENT = 0x0004;         // Без системного прогресс-бара
+        private const ushort FOF_NOERRORUI = 0x0400;
+
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+        private static extern int SHFileOperation([In] ref SHFILEOPSTRUCT lpFileOp);
+
+        public static bool SendToRecycleBin(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return false;
+
+            // Проверяем существование файла или папки
+            bool isDir = Directory.Exists(path);
+            bool isFile = File.Exists(path);
+            if (!isDir && !isFile) return false;
+
+            try
+            {
+                // КРИТИЧЕСКИ ВАЖНО: Win32 требует двойной нуль в конце строки пути (\0\0)
+                string nullTerminatedPath = path.TrimEnd('\\') + "\0\0";
+
+                var fileOp = new SHFILEOPSTRUCT
+                {
+                    wFunc = FO_DELETE,
+                    pFrom = nullTerminatedPath,
+                    fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI
+                };
+
+                int result = SHFileOperation(ref fileOp);
+                return result == 0 && !fileOp.fAnyOperationsAborted;
+            }
+            catch
+            {
+                // Fallback: штатный метод .NET Framework / VisualBasic
+                try
+                {
+                    if (Directory.Exists(path))
+                    {
+                        Microsoft.VisualBasic.FileIO.FileSystem.DeleteDirectory(
+                            path,
+                            Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,
+                            Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
+                        return true;
+                    }
+                    if (File.Exists(path))
+                    {
+                        Microsoft.VisualBasic.FileIO.FileSystem.DeleteFile(
+                            path,
+                            Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,
+                            Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
+                        return true;
+                    }
+                }
+                catch { }
+
+                return false;
+            }
+        }
     }
 
     private const int FindExInfoBasic = 1;
@@ -97,9 +178,10 @@ public static class DiskAnalyzerService
                     Item = new DiskItemModel
                     {
                         Name = "Файлы в корне",
-                        FullPath = cleanRoot,
+                        FullPath = string.Empty,
                         SizeBytes = looseFilesSize,
                         IsFolder = false,
+                        IsSynthetic = true,
                         Level = 1,
                         ColorHex = "#94A3B8"
                     }
@@ -335,43 +417,8 @@ public static class DiskAnalyzerService
         return totalBytes;
     }
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
-    private struct SHFILEOPSTRUCT
-    {
-        public IntPtr hwnd;
-        public uint wFunc;
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string pFrom;
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string? pTo;
-        public ushort fFlags;
-        [MarshalAs(UnmanagedType.Bool)]
-        public bool fAnyOperationsAborted;
-        public IntPtr hNameMappings;
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string? lpszProgressTitle;
-    }
-
-    private const uint FoDelete = 0x0003;
-    private const ushort FofAllowundo = 0x0040;
-    private const ushort FofNoconfirmation = 0x0010;
-    private const ushort FofSilent = 0x0004;
-
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
-    private static extern int SHFileOperation(ref SHFILEOPSTRUCT lpFileOp);
-
     public static bool MoveToRecycleBin(string path)
     {
-        try
-        {
-            var shf = new SHFILEOPSTRUCT
-            {
-                wFunc = FoDelete,
-                pFrom = path + '\0' + '\0',
-                fFlags = FofAllowundo | FofNoconfirmation | FofSilent
-            };
-            return SHFileOperation(ref shf) == 0;
-        }
-        catch { return false; }
+        return RecycleBinHelper.SendToRecycleBin(path);
     }
 }

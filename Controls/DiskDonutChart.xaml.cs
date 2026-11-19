@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Windows;
@@ -86,23 +86,23 @@ public partial class DiskDonutChart : UserControl
         set => SetValue(ItemContextMenuProperty, value);
     }
 
-    // Сочная неоновая палитра цветов
+    // Сдержанная палитра диагностической консоли
     private static readonly Color[] PaletteColors = new Color[]
     {
-        (Color)ColorConverter.ConvertFromString("#38BDF8"), // Cyan
-        (Color)ColorConverter.ConvertFromString("#818CF8"), // Indigo
-        (Color)ColorConverter.ConvertFromString("#C084FC"), // Purple
-        (Color)ColorConverter.ConvertFromString("#F472B6"), // Pink
-        (Color)ColorConverter.ConvertFromString("#FB7185"), // Rose
-        (Color)ColorConverter.ConvertFromString("#FBBF24"), // Amber
-        (Color)ColorConverter.ConvertFromString("#34D399"), // Emerald
-        (Color)ColorConverter.ConvertFromString("#60A5FA"), // Blue
-        (Color)ColorConverter.ConvertFromString("#A78BFA"), // Violet
-        (Color)ColorConverter.ConvertFromString("#2DD4BF")  // Teal
+        (Color)ColorConverter.ConvertFromString("#38BDF8"),
+        (Color)ColorConverter.ConvertFromString("#C9842D"),
+        (Color)ColorConverter.ConvertFromString("#A96E2D"),
+        (Color)ColorConverter.ConvertFromString("#D4B36A"),
+        (Color)ColorConverter.ConvertFromString("#788B6A"),
+        (Color)ColorConverter.ConvertFromString("#A06B45"),
+        (Color)ColorConverter.ConvertFromString("#C6A15B"),
+        (Color)ColorConverter.ConvertFromString("#6F8E79"),
+        (Color)ColorConverter.ConvertFromString("#9A8356"),
+        (Color)ColorConverter.ConvertFromString("#A97245")
     };
 
-    private readonly Pen _sliceBorderPen = new(new SolidColorBrush(Color.FromArgb(220, 6, 9, 16)), 1.5);
-    private readonly Pen _centerBorderPen = new(new SolidColorBrush(Color.FromArgb(255, 30, 41, 59)), 2.5);
+    private readonly Pen _sliceBorderPen = new(new SolidColorBrush(Color.FromArgb(220, 11, 15, 17)), 1.0);
+    private readonly Pen _centerBorderPen = new(new SolidColorBrush(Color.FromArgb(255, 44, 57, 60)), 1.5);
 
     // Состояния плавной анимации
     private readonly Dictionary<DiskItemModel, double> _sliceExpansions = new();
@@ -240,7 +240,7 @@ public partial class DiskDonutChart : UserControl
                 double rInEffective = Math.Max(centerRadius + 2.0, rIn - (2.0 * exp));
 
                 // Расчет плавного затухания невыбранных секторов
-                Color c = PaletteColors[index % PaletteColors.Length];
+                Color c = TryParseColor(item.ColorHex) ?? PaletteColors[index % PaletteColors.Length];
                 if (item.Level == 2)
                 {
                     c = Color.FromRgb((byte)(c.R * 0.88), (byte)(c.G * 0.88), (byte)(c.B * 0.88));
@@ -304,7 +304,7 @@ public partial class DiskDonutChart : UserControl
             headerText = "💾 ТЕКУЩИЙ КАТАЛОГ";
             headerBrush = new SolidColorBrush(Color.FromRgb(56, 189, 248));
             titleText = string.IsNullOrWhiteSpace(FolderNameText) ? "C:\\" : FolderNameText;
-            sizeText = string.IsNullOrWhiteSpace(TotalSizeText) || TotalSizeText == "0 ГБ" ? "468,33 ГБ" : TotalSizeText;
+            sizeText = string.IsNullOrWhiteSpace(TotalSizeText) ? "0 Б" : TotalSizeText;
             subtitleText = "Двухуровневый Sunburst";
         }
 
@@ -378,6 +378,18 @@ public partial class DiskDonutChart : UserControl
 
         geom.Freeze();
         return geom;
+    }
+
+    private static Color? TryParseColor(string? hex)
+    {
+        try
+        {
+            return string.IsNullOrWhiteSpace(hex) ? null : (Color)ColorConverter.ConvertFromString(hex);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     // Точный расчет сектора под курсором с нормализацией циклических углов

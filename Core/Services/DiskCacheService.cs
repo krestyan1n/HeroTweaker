@@ -12,7 +12,8 @@ namespace HeroTweaker.Core.Services;
 public static class DiskCacheService
 {
     private const uint CacheMagicHeader = 0x48544443; // "HTDC"
-    private const byte CacheFormatVersion = 3; // Версия с поддержкой Level, StartAngle и SweepAngle
+    private const byte CacheFormatVersion = 4; // Добавлено время сканирования
+    private static readonly TimeSpan CacheLifetime = TimeSpan.FromMinutes(15);
 
     private static readonly string CacheDirectory = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -68,7 +69,7 @@ public static class DiskCacheService
         // 1. Проверка оперативного кэша L1
         if (MemoryCache.TryGetValue(normPath, out var memEntry))
         {
-            if ((DateTime.UtcNow - memEntry.CachedAt).TotalMinutes < 15)
+            if (DateTime.UtcNow - memEntry.CachedAt < CacheLifetime)
             {
                 return (memEntry.Slices, memEntry.Level1, memEntry.TotalSize);
             }
@@ -91,6 +92,9 @@ public static class DiskCacheService
 
                 string storedPath = br.ReadString();
                 if (!normPath.Equals(storedPath, StringComparison.OrdinalIgnoreCase)) return null;
+
+                var cachedAt = new DateTime(br.ReadInt64(), DateTimeKind.Utc);
+                if (DateTime.UtcNow - cachedAt >= CacheLifetime) return null;
 
                 long totalSize = br.ReadInt64();
 
@@ -144,6 +148,7 @@ public static class DiskCacheService
                     bw.Write(CacheMagicHeader);
                     bw.Write(CacheFormatVersion);
                     bw.Write(normPath);
+                    bw.Write(DateTime.UtcNow.Ticks);
                     bw.Write(totalSize);
 
                     bw.Write(slicesList.Count);

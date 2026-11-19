@@ -25,6 +25,9 @@
 	<ItemGroup>
 		<Resource Include="Hero.ico" />
 	</ItemGroup>
+	<ItemGroup>
+	  <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.12" />
+	</ItemGroup>
 
 	<!-- Параметры публикации единого EXE-файла в папку publish -->
 	<PropertyGroup Condition="'$(Configuration)' == 'Release'">
