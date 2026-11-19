@@ -1558,7 +1558,9 @@ public class MainViewModel : ObservableObject
 
             if (SelectedAdapter == null || !AvailableAdapters.Any(a => a.Name == SelectedAdapter.Name))
             {
-                SelectedAdapter = AvailableAdapters.FirstOrDefault(a => a.IsUp) ?? AvailableAdapters.FirstOrDefault();
+                SelectedAdapter = AvailableAdapters.FirstOrDefault(a => a.IsDefaultRoute)
+                    ?? AvailableAdapters.FirstOrDefault(a => a.IsUp)
+                    ?? AvailableAdapters.FirstOrDefault();
             }
             else
             {

@@ -217,7 +217,10 @@ public static class NetworkOptimizerService
                     Description = nic.Description,
                     IsUp = true,
                     InterfaceType = nic.NetworkInterfaceType,
-                    IpAddress = unicast.Address.ToString()
+                    IpAddress = unicast.Address.ToString(),
+                    IsDefaultRoute = ipProp.GatewayAddresses.Any(gateway =>
+                        gateway.Address.AddressFamily == AddressFamily.InterNetwork &&
+                        !System.Net.IPAddress.Any.Equals(gateway.Address))
                 };
 
                 var dnsList = ipProp.DnsAddresses.Where(a => a.AddressFamily == AddressFamily.InterNetwork).ToList();
@@ -235,7 +238,11 @@ public static class NetworkOptimizerService
         }
         catch { }
 
-        return list;
+        return list
+            .OrderByDescending(adapter => adapter.IsDefaultRoute)
+            .ThenByDescending(adapter => adapter.InterfaceType == NetworkInterfaceType.Ethernet)
+            .ThenBy(adapter => adapter.Name)
+            .ToList();
     }
 
     public static async Task ApplyDnsAsync(string adapterName, string primaryDns, string secondaryDns)

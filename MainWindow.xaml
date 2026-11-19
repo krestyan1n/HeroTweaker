@@ -4,7 +4,7 @@
         xmlns:helpers="clr-namespace:HeroTweaker.Core.Helpers"
         xmlns:converters="clr-namespace:HeroTweaker.Converters"
         xmlns:controls="clr-namespace:HeroTweaker.Controls"
-        Title="HeroTweaker v0.8.7.4 BETA"
+        Title="HeroTweaker v0.8.9.1"
         Icon="pack://application:,,,/Hero.ico"
         Height="860" Width="1280"
         MinHeight="720" MinWidth="1040"
@@ -714,7 +714,7 @@
                         </Border>
                         <StackPanel VerticalAlignment="Center">
                             <TextBlock Text="HeroTweaker" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/>
-                            <TextBlock Text="SYSTEM OPTIMIZATION UTILITY  ·  v0.8.7.4" FontFamily="Cascadia Mono" FontSize="8.5" Foreground="{DynamicResource TextMutedBrush}" Margin="0,1,0,0"/>
+                            <TextBlock Text="SYSTEM OPTIMIZATION UTILITY  ·  v0.8.9.1" FontFamily="Cascadia Mono" FontSize="8.5" Foreground="{DynamicResource TextMutedBrush}" Margin="0,1,0,0"/>
                         </StackPanel>
                     </StackPanel>
 
@@ -806,7 +806,7 @@
                     <Border Background="#171D1D" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="8,5" Margin="0,12,0,0">
                         <DockPanel>
                             <Ellipse Width="6" Height="6" Fill="#70C17A" VerticalAlignment="Center" Margin="0,0,7,0"/>
-                            <TextBlock Text="NODE READY  //  v0.8.7.4" FontSize="8.5" FontWeight="Bold" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            <TextBlock Text="NODE READY  //  v0.8.9.1" FontSize="8.5" FontWeight="Bold" Foreground="{DynamicResource TextSecondaryBrush}"/>
                         </DockPanel>
                     </Border>
                 </StackPanel>
@@ -1911,8 +1911,8 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <ListBox Grid.Column="0" ItemsSource="{Binding AvailableAdapters}" SelectedItem="{Binding SelectedAdapter, Mode=TwoWay}" Style="{StaticResource NetworkAdapterListBoxStyle}" ItemContainerStyle="{StaticResource NetworkAdapterListBoxItemStyle}" Height="88" Margin="0,0,12,0">
-                                        <ListBox.ItemTemplate>
+                                    <ComboBox Grid.Column="0" ItemsSource="{Binding AvailableAdapters}" SelectedItem="{Binding SelectedAdapter, Mode=TwoWay}" MaxDropDownHeight="280" Height="54" Margin="0,0,12,0">
+                                        <ComboBox.ItemTemplate>
                                             <DataTemplate>
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
@@ -1931,8 +1931,8 @@
                                                     </StackPanel>
                                                 </Grid>
                                             </DataTemplate>
-                                        </ListBox.ItemTemplate>
-                                    </ListBox>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
                                     <Border Grid.Column="1" Background="#14060B12" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="12" Padding="12,6">
                                         <StackPanel VerticalAlignment="Center">
                                             <TextBlock Text="ТЕКУЩИЙ DNS АДАПТЕРА" FontSize="8.5" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}"/>
@@ -2117,7 +2117,7 @@
                         <Border Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="14">
                             <StackPanel>
                                 <TextBlock Text="О приложении HeroTweaker" FontSize="12.5" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,6"/>
-                                <TextBlock Text="Версия ядра: v0.8.7.4 Beta • Hero Engineering" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11"/>
+                                <TextBlock Text="Версия ядра: v0.8.9.1 • Hero Engineering" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>
@@ -2141,7 +2141,7 @@
         </Grid>
 
         <!-- ОВЕРЛЕЙ ДЕТАЛИЗАЦИИ HEALTH SCORE -->
-        <Border Grid.ColumnSpan="2" Background="#D004070F" Panel.ZIndex="4500" Visibility="{Binding IsHealthDetailsOpen, Converter={StaticResource BoolToVis}}">
+        <Border Grid.RowSpan="2" Grid.ColumnSpan="2" Background="#D004070F" Panel.ZIndex="4500" Visibility="{Binding IsHealthDetailsOpen, Converter={StaticResource BoolToVis}}">
             <Border Background="#12191B" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="12" Width="680" MaxHeight="520" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="20">
                 <Grid>
                     <Grid.RowDefinitions>
@@ -2274,7 +2274,7 @@
                     <TextBlock Text="Hero" FontSize="26" FontWeight="Black" Foreground="{DynamicResource TextPrimaryBrush}" />
                     <TextBlock Text="Tweaker" FontSize="26" FontWeight="Light" Foreground="{DynamicResource CyanAccentBrush}" />
                 </StackPanel>
-                <TextBlock Text="Hero Engineering • v0.8.7.4 BETA" FontSize="10.5" Foreground="{DynamicResource CyanGlowBrush}" HorizontalAlignment="Center" Margin="0,0,0,20" FontWeight="SemiBold"/>
+                <TextBlock Text="Hero Engineering • v0.8.9.1" FontSize="10.5" Foreground="{DynamicResource CyanGlowBrush}" HorizontalAlignment="Center" Margin="0,0,0,20" FontWeight="SemiBold"/>
                 <ProgressBar Value="{Binding SplashProgress}" Maximum="100" Height="3" Background="#182023" Foreground="{DynamicResource CyanAccentBrush}" BorderThickness="0" Margin="0,0,0,10"/>
                 <TextBlock Text="{Binding SplashStatus}" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center"/>
             </StackPanel>

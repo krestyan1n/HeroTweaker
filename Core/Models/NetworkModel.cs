@@ -65,6 +65,7 @@ public class NetworkAdapterInfo : ObservableObject
     public string IpAddress { get; set; } = "0.0.0.0";
     public string CurrentDns { get; set; } = "DHCP (Автоматически)";
     public bool IsUp { get; set; }
+    public bool IsDefaultRoute { get; set; }
     public NetworkInterfaceType InterfaceType { get; set; }
 
     public string DisplayTitle => $"{Name} ({Description})";
