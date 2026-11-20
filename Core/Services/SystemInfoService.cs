@@ -10,9 +10,14 @@ public class SystemInfoModel
 {
     public string OsName { get; set; } = "Windows 11 Pro";
     public string OsBuild { get; set; } = "26100";
+    public string OsArchitecture { get; set; } = Environment.Is64BitOperatingSystem ? "x64" : "x86";
     public string CpuName { get; set; } = "AMD Ryzen / Intel Core";
     public int CpuThreads { get; set; } = 16;
     public string TotalRamFormatted { get; set; } = "32 ГБ";
+    public string SystemManufacturer { get; set; } = "Производитель не определён";
+    public string SystemModel { get; set; } = "Модель не определена";
+    public string Motherboard { get; set; } = "Материнская плата не определена";
+    public string BiosVersion { get; set; } = "BIOS не определён";
     public string GpuName { get; set; } = "NVIDIA GeForce";
 }
 
@@ -65,7 +70,37 @@ public static class SystemInfoService
             }
             catch { }
 
-            // 3. Объем оперативной памяти через Win32 API
+            // 3.1. Данные системы и платы из SMBIOS, опубликованные Windows в реестре.
+            try
+            {
+                using var biosKey = Registry.LocalMachine.OpenSubKey(
+                    @"HARDWARE\DESCRIPTION\System\BIOS");
+                if (biosKey != null)
+                {
+                    info.SystemManufacturer = CleanHardwareValue(biosKey.GetValue("SystemManufacturer"))
+                        ?? info.SystemManufacturer;
+                    info.SystemModel = CleanHardwareValue(biosKey.GetValue("SystemProductName"))
+                        ?? info.SystemModel;
+
+                    var boardManufacturer = CleanHardwareValue(biosKey.GetValue("BaseBoardManufacturer"));
+                    var boardProduct = CleanHardwareValue(biosKey.GetValue("BaseBoardProduct"));
+                    var boardVersion = CleanHardwareValue(biosKey.GetValue("BaseBoardVersion"));
+                    var boardParts = new[] { boardManufacturer, boardProduct, boardVersion }
+                        .Where(value => !string.IsNullOrWhiteSpace(value))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
+                    if (boardParts.Length > 0)
+                        info.Motherboard = string.Join(" ", boardParts);
+
+                    var biosVersion = CleanHardwareValue(biosKey.GetValue("SMBIOSBIOSVersion"))
+                        ?? CleanHardwareValue(biosKey.GetValue("BIOSVersion"));
+                    if (biosVersion != null)
+                        info.BiosVersion = biosVersion;
+                }
+            }
+            catch { }
+
+            // 4. Объем оперативной памяти.
             try
             {
                 long totalBytes = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
@@ -79,7 +114,7 @@ public static class SystemInfoService
             }
             catch { }
 
-            // 4. Определение видеокарты через реестр DirectX
+            // 5. Определение видеокарты через реестр DirectX
             try
             {
                 using var dxKey = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}\0000");
@@ -96,5 +131,24 @@ public static class SystemInfoService
 
             return info;
         });
+    }
+
+    private static string? CleanHardwareValue(object? rawValue)
+    {
+        var value = rawValue switch
+        {
+            string text => text.Trim(),
+            string[] lines => string.Join(" ", lines).Trim(),
+            _ => rawValue?.ToString()?.Trim()
+        };
+
+        if (string.IsNullOrWhiteSpace(value) ||
+            value.Equals("To be filled by O.E.M.", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("Default string", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("System Product Name", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("Not Applicable", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        return value;
     }
 }

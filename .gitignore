@@ -480,3 +480,12 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Local SDK/cache and generated release artifacts
+.dotnet-cli/
+.nuget-packages/
+ui-dist/
+frontend/node_modules/
+out-*/
+out-current/
+Hero-preview.png

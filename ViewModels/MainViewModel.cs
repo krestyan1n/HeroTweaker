@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -8,6 +8,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Input;
@@ -18,6 +19,7 @@ using HeroTweaker.Core.Interfaces;
 using HeroTweaker.Core.Models;
 using HeroTweaker.Core.Models.Transactions;
 using HeroTweaker.Core.Services;
+using MessageBox = HeroTweaker.Core.Services.HeroDialog;
 using HeroTweaker.ViewModels.Base;
 
 namespace HeroTweaker.ViewModels;
@@ -112,8 +114,47 @@ public class MainViewModel : ObservableObject
         set => SetField(ref _releaseUrl, value);
     }
 
+    private string _updateStatus = $"Текущая версия {UpdateCheckerService.CurrentVersion}.";
+    public string UpdateStatus { get => _updateStatus; private set => SetField(ref _updateStatus, value); }
+    public string AppVersionDisplay => UpdateCheckerService.CurrentVersion;
+    public string AppWindowTitle => $"HeroTweaker v{AppVersionDisplay}";
+    private double _updateProgress;
+    public double UpdateProgress { get => _updateProgress; private set => SetField(ref _updateProgress, value); }
+    private bool _isUpdateChecking;
+    public bool IsUpdateChecking
+    {
+        get => _isUpdateChecking;
+        private set
+        {
+            if (SetField(ref _isUpdateChecking, value))
+            {
+                OnPropertyChanged(nameof(UpdateActionText));
+                CommandManager.InvalidateRequerySuggested();
+            }
+        }
+    }
+    private bool _isUpdateInstalling;
+    public bool IsUpdateInstalling
+    {
+        get => _isUpdateInstalling;
+        private set
+        {
+            if (SetField(ref _isUpdateInstalling, value))
+            {
+                OnPropertyChanged(nameof(UpdateActionText));
+                OnPropertyChanged(nameof(CanInstallUpdate));
+                CommandManager.InvalidateRequerySuggested();
+            }
+        }
+    }
+    public string UpdateActionText => IsUpdateChecking ? "Проверяю..." : IsUpdateInstalling ? "Установка..." : "Проверить обновления";
+    private UpdateCheckResult? _availableUpdate;
+    public bool CanInstallUpdate => _availableUpdate?.CanInstall == true && HasUpdateAvailable && !IsUpdateInstalling;
+
     public ICommand OpenUpdateUrlCommand { get; }
     public ICommand DismissUpdateCommand { get; }
+    public ICommand CheckForUpdatesCommand { get; }
+    public ICommand InstallUpdateCommand { get; }
 
     // === СОСТОЯНИЕ ЗАГРУЗКИ (SPLASH SCREEN) ===
     private bool _isAppLoading = true;
@@ -136,8 +177,29 @@ public class MainViewModel : ObservableObject
     public bool IsDeveloperVisible => SelectedCategory == "Developer";
     public bool IsStartupVisible => SelectedCategory == "Автозагрузка";
     public bool IsNetworkVisible => SelectedCategory == "Сеть & Пинг";
+    public bool IsAmdGpuVisible => SelectedCategory == "AMD GPU";
+    public bool IsNvidiaGpuVisible => SelectedCategory == "NVIDIA GPU";
+    public bool IsGpuAuditVisible => IsAmdGpuVisible || IsNvidiaGpuVisible;
+    private int _gpuModuleTabIndex;
+    public int GpuModuleTabIndex
+    {
+        get => _gpuModuleTabIndex;
+        set
+        {
+            if (!SetField(ref _gpuModuleTabIndex, value)) return;
+            OnPropertyChanged(nameof(IsGpuOverviewVisible));
+            OnPropertyChanged(nameof(IsGpuProfilesVisible));
+            OnPropertyChanged(nameof(IsGpuDiagnosticsVisible));
+            OnPropertyChanged(nameof(IsGpuDriverVisible));
+        }
+    }
+    public bool IsGpuOverviewVisible => GpuModuleTabIndex == 0;
+    public bool IsGpuProfilesVisible => GpuModuleTabIndex == 1;
+    public bool IsGpuDiagnosticsVisible => GpuModuleTabIndex == 2;
+    public bool IsGpuDriverVisible => GpuModuleTabIndex == 3;
+    public bool IsBenchmarkVisible => SelectedCategory == "Бенчмарк";
     public bool IsSettingsVisible => SelectedCategory == "Настройки";
-    public bool IsTweaksVisible => !IsDashboardVisible && !IsDiskVisible && !IsDriversVisible && !IsAppsVisible && !IsSettingsVisible && !IsDeveloperVisible && !IsStartupVisible && !IsNetworkVisible;
+    public bool IsTweaksVisible => !IsDashboardVisible && !IsDiskVisible && !IsDriversVisible && !IsAppsVisible && !IsSettingsVisible && !IsDeveloperVisible && !IsStartupVisible && !IsNetworkVisible && !IsGpuAuditVisible && !IsBenchmarkVisible;
     public bool IsSearchVisible => IsTweaksVisible;
 
     public string CategorySubtitle => SelectedCategory switch
@@ -149,6 +211,9 @@ public class MainViewModel : ObservableObject
         "Developer" => "Аудит окружения разработки: компиляторы, разрешение бинарников и чистка дубликатов PATH",
         "Автозагрузка" => "Оптимизация времени холодного старта ПК и управление фоновыми автозапускаемыми службами",
         "Сеть & Пинг" => "Выбор адаптера, сетевой реаниматор, DNS бенчмарк и сверхнизкая задержка Nagle",
+        "AMD GPU" => "Аудит AMD-адаптера: конфигурация Windows, память видеокарты и готовность к диагностике производительности",
+        "NVIDIA GPU" => "Аудит NVIDIA-адаптера: конфигурация Windows, память видеокарты и готовность к диагностике производительности",
+        "Бенчмарк" => "Сравнение замеров до и после по CSV PresentMon — только измеренные данные, без выдуманных баллов",
         "Настройки" => "Выбор цветовой палитры интерфейса, управление снимками реестра и кэшем",
         _ => "Управление и глубокая оптимизация параметров операционной системы"
     };
@@ -171,6 +236,8 @@ public class MainViewModel : ObservableObject
 
     private readonly List<double> _cpuHistory = new();
     private readonly List<double> _ramHistory = new();
+    public IReadOnlyList<double> CpuHistory => _cpuHistory.ToArray();
+    public IReadOnlyList<double> RamHistory => _ramHistory.ToArray();
 
     private string _activePowerPlanName = "Сбалансированная";
     public string ActivePowerPlanName { get => _activePowerPlanName; set => SetField(ref _activePowerPlanName, value); }
@@ -207,6 +274,139 @@ public class MainViewModel : ObservableObject
 
     // === СЕТЬ: АДАПТЕРЫ И DNS ===
     public ObservableCollection<NetworkAdapterInfo> AvailableAdapters { get; } = new();
+
+    // === GPU AUDIT: безопасная диагностика без неофициальных драйверных твиков ===
+    public ObservableCollection<GpuAdapterInfo> GpuAdapters { get; } = new();
+    public ObservableCollection<GpuAuditCheck> GpuAuditChecks { get; } = new();
+    public ObservableCollection<GpuAuditCheck> GpuWindowsChecks { get; } = new();
+    public ObservableCollection<GpuGameProfile> GpuGameProfiles { get; } = new();
+
+    private bool _hasAmdGpu;
+    public bool HasAmdGpu
+    {
+        get => _hasAmdGpu;
+        private set
+        {
+            if (SetField(ref _hasAmdGpu, value))
+                OnPropertyChanged(nameof(HasSupportedGpu));
+        }
+    }
+
+    private bool _hasNvidiaGpu;
+    public bool HasNvidiaGpu
+    {
+        get => _hasNvidiaGpu;
+        private set
+        {
+            if (SetField(ref _hasNvidiaGpu, value))
+                OnPropertyChanged(nameof(HasSupportedGpu));
+        }
+    }
+
+    public bool HasSupportedGpu => HasAmdGpu || HasNvidiaGpu;
+
+    // === ИЗМЕРЕНИЯ ПРОИЗВОДИТЕЛЬНОСТИ ===
+    private FrameTimeBenchmarkResult? _benchmarkBaseline;
+    public FrameTimeBenchmarkResult? BenchmarkBaseline { get => _benchmarkBaseline; private set => SetField(ref _benchmarkBaseline, value); }
+    private FrameTimeBenchmarkResult? _benchmarkAfter;
+    public FrameTimeBenchmarkResult? BenchmarkAfter { get => _benchmarkAfter; private set => SetField(ref _benchmarkAfter, value); }
+    public bool HasBenchmarkBaseline => BenchmarkBaseline != null;
+    public bool HasBenchmarkAfter => BenchmarkAfter != null;
+    public bool HasBenchmarkComparison => BenchmarkBaseline != null && BenchmarkAfter != null;
+    public string BenchmarkAverageFpsDelta => HasBenchmarkComparison
+        ? $"{BenchmarkAfter!.AverageFps - BenchmarkBaseline!.AverageFps:+0.0;-0.0;0.0} FPS"
+        : "Нет второго замера";
+    public string BenchmarkTelemetryComparisonText => !HasBenchmarkComparison
+        ? "Снимите оба замера, чтобы увидеть изменения системной и GPU-телеметрии."
+        : string.Join("   ·   ", new[]
+        {
+            CompareTelemetry("CPU игры", BenchmarkBaseline!.AverageGameCpuPercent, BenchmarkAfter!.AverageGameCpuPercent, "%", "F1"),
+            CompareTelemetry("RAM игры", BenchmarkBaseline.AverageGameWorkingSetMb, BenchmarkAfter.AverageGameWorkingSetMb, "МБ", "F0"),
+            CompareTelemetry("GPU игры", BenchmarkBaseline.AverageGameGpuEnginePercent, BenchmarkAfter.AverageGameGpuEnginePercent, "%", "F1"),
+            CompareTelemetry("GPU load", BenchmarkBaseline.AverageGpuLoadPercent, BenchmarkAfter.AverageGpuLoadPercent, "%", "F1"),
+            CompareTelemetry("GPU temp", BenchmarkBaseline.AverageGpuTemperatureC, BenchmarkAfter.AverageGpuTemperatureC, "°C", "F1"),
+            CompareTelemetry("GPU power", BenchmarkBaseline.AverageGpuPowerWatts, BenchmarkAfter.AverageGpuPowerWatts, "Вт", "F0"),
+            CompareTelemetry("CPU системы", BenchmarkBaseline.AverageSystemCpuPercent, BenchmarkAfter.AverageSystemCpuPercent, "%", "F1"),
+            CompareTelemetry("RAM системы", BenchmarkBaseline.AverageSystemUsedMemoryGb, BenchmarkAfter.AverageSystemUsedMemoryGb, "ГБ", "F1")
+        });
+
+    private static string CompareTelemetry(string label, double? before, double? after, string unit, string format)
+    {
+        if (!before.HasValue || !after.HasValue) return $"{label}: недоступно";
+        var delta = after.Value - before.Value;
+        var deltaUnit = unit == "%" ? "п.п." : unit;
+        return $"{label}: {before.Value.ToString(format)} {unit} → {after.Value.ToString(format)} {unit} (Δ {delta:+0.0;-0.0;0.0} {deltaUnit})";
+    }
+    private bool _isBenchmarkCapturing;
+    public bool IsBenchmarkCapturing { get => _isBenchmarkCapturing; private set => SetField(ref _isBenchmarkCapturing, value); }
+    private string _benchmarkStatus = "Выберите EXE игры и длительность захвата.";
+    public string BenchmarkStatus { get => _benchmarkStatus; private set => SetField(ref _benchmarkStatus, value); }
+    private int _benchmarkDurationSeconds = 60;
+    public int BenchmarkDurationSeconds { get => _benchmarkDurationSeconds; set => SetField(ref _benchmarkDurationSeconds, Math.Clamp(value, 15, 600)); }
+
+    private GpuAdapterInfo? _activeGpuAdapter;
+    public GpuAdapterInfo? ActiveGpuAdapter { get => _activeGpuAdapter; private set => SetField(ref _activeGpuAdapter, value); }
+
+    private string _gpuAuditStatus = "Ожидание аппаратного аудита";
+    public string GpuAuditStatus { get => _gpuAuditStatus; private set => SetField(ref _gpuAuditStatus, value); }
+
+    private bool _isAmdGpuTuningAvailable;
+    public bool IsAmdGpuTuningAvailable { get => _isAmdGpuTuningAvailable; private set => SetField(ref _isAmdGpuTuningAvailable, value); }
+
+    private bool _isAmdGpuTuningBusy;
+    public bool IsAmdGpuTuningBusy
+    {
+        get => _isAmdGpuTuningBusy;
+        private set
+        {
+            if (SetField(ref _isAmdGpuTuningBusy, value))
+                CommandManager.InvalidateRequerySuggested();
+        }
+    }
+
+    private string _amdGpuTuningStatus = "Параметры управления ещё не считаны из AMD-драйвера.";
+    public string AmdGpuTuningStatus { get => _amdGpuTuningStatus; private set => SetField(ref _amdGpuTuningStatus, value); }
+
+    private double _amdGpuMinFrequency;
+    public double AmdGpuMinFrequency { get => _amdGpuMinFrequency; set => SetField(ref _amdGpuMinFrequency, value); }
+
+    private double _amdGpuMaxFrequency;
+    public double AmdGpuMaxFrequency { get => _amdGpuMaxFrequency; set => SetField(ref _amdGpuMaxFrequency, value); }
+
+    private double _amdGpuMinFrequencyLimit;
+    public double AmdGpuMinFrequencyLimit { get => _amdGpuMinFrequencyLimit; private set => SetField(ref _amdGpuMinFrequencyLimit, value); }
+
+    private double _amdGpuMaxFrequencyLimit;
+    public double AmdGpuMaxFrequencyLimit { get => _amdGpuMaxFrequencyLimit; private set => SetField(ref _amdGpuMaxFrequencyLimit, value); }
+    private double _amdGpuMinFrequencyStep = 1;
+    public double AmdGpuMinFrequencyStep { get => _amdGpuMinFrequencyStep; private set => SetField(ref _amdGpuMinFrequencyStep, value); }
+    private double _amdGpuMaxFrequencyStep = 1;
+    public double AmdGpuMaxFrequencyStep { get => _amdGpuMaxFrequencyStep; private set => SetField(ref _amdGpuMaxFrequencyStep, value); }
+
+    private bool _isAmdPowerLimitAvailable;
+    public bool IsAmdPowerLimitAvailable { get => _isAmdPowerLimitAvailable; private set => SetField(ref _isAmdPowerLimitAvailable, value); }
+    private string _amdPowerLimitStatus = "Лимит мощности ещё не считан из драйвера.";
+    public string AmdPowerLimitStatus { get => _amdPowerLimitStatus; private set => SetField(ref _amdPowerLimitStatus, value); }
+    private double _amdPowerLimit;
+    public double AmdPowerLimit { get => _amdPowerLimit; set => SetField(ref _amdPowerLimit, value); }
+    private double _amdPowerLimitMin;
+    public double AmdPowerLimitMin { get => _amdPowerLimitMin; private set => SetField(ref _amdPowerLimitMin, value); }
+    private double _amdPowerLimitMax;
+    public double AmdPowerLimitMax { get => _amdPowerLimitMax; private set => SetField(ref _amdPowerLimitMax, value); }
+    private double _amdPowerLimitStep = 1;
+    public double AmdPowerLimitStep { get => _amdPowerLimitStep; private set => SetField(ref _amdPowerLimitStep, value); }
+    private bool _isAmdVramFrequencyAvailable;
+    public bool IsAmdVramFrequencyAvailable { get => _isAmdVramFrequencyAvailable; private set => SetField(ref _isAmdVramFrequencyAvailable, value); }
+    private string _amdVramStatus = "Частота видеопамяти ещё не считана из драйвера.";
+    public string AmdVramStatus { get => _amdVramStatus; private set => SetField(ref _amdVramStatus, value); }
+    private double _amdVramFrequency;
+    public double AmdVramFrequency { get => _amdVramFrequency; set => SetField(ref _amdVramFrequency, value); }
+    private double _amdVramFrequencyMin;
+    public double AmdVramFrequencyMin { get => _amdVramFrequencyMin; private set => SetField(ref _amdVramFrequencyMin, value); }
+    private double _amdVramFrequencyMax;
+    public double AmdVramFrequencyMax { get => _amdVramFrequencyMax; private set => SetField(ref _amdVramFrequencyMax, value); }
+    private double _amdVramFrequencyStep = 1;
+    public double AmdVramFrequencyStep { get => _amdVramFrequencyStep; private set => SetField(ref _amdVramFrequencyStep, value); }
 
     private NetworkAdapterInfo? _selectedAdapter;
     public NetworkAdapterInfo? SelectedAdapter
@@ -278,6 +478,23 @@ public class MainViewModel : ObservableObject
     public ObservableCollection<DiskItemModel> Level1ListItems { get; } = new();
     public ObservableCollection<BreadcrumbItem> Breadcrumbs { get; } = new();
     public ObservableCollection<DriveSelectModel> AvailableDrives { get; } = new();
+
+    private bool _isLoadingAvailableDrives;
+    public bool IsLoadingAvailableDrives
+    {
+        get => _isLoadingAvailableDrives;
+        private set
+        {
+            if (SetField(ref _isLoadingAvailableDrives, value))
+                OnPropertyChanged(nameof(DriveInventoryStatus));
+        }
+    }
+
+    public string DriveInventoryStatus => IsLoadingAvailableDrives
+        ? "Поиск доступных накопителей…"
+        : AvailableDrives.Count == 0
+            ? "Готовые тома не найдены. Подключите диск или нажмите «Обновить» в разделе DiskTree."
+            : string.Empty;
 
     private DiskItemModel? _hoveredDiskItem;
     public DiskItemModel? HoveredDiskItem { get => _hoveredDiskItem; set => SetField(ref _hoveredDiskItem, value); }
@@ -400,7 +617,12 @@ public class MainViewModel : ObservableObject
 
     public ObservableCollection<CatalogAppModel> CatalogApps { get; } = new(AppManagerService.GetCatalogApps());
     public ObservableCollection<InstalledProgramModel> InstalledPrograms { get; } = new();
+    public ObservableCollection<AppLeftoverModel> AppLeftovers { get; } = new();
     public ICollectionView FilteredInstalledPrograms { get; }
+
+    public int SelectedUninstallCount => InstalledPrograms.Count(program => program.IsSelected);
+    public int SelectedLeftoverCount => AppLeftovers.Count(item => item.IsSelected);
+    public bool HasAppLeftovers => AppLeftovers.Count > 0;
 
     private string _appsSearchText = string.Empty;
     public string AppsSearchText
@@ -498,11 +720,16 @@ public class MainViewModel : ObservableObject
                 OnPropertyChanged(nameof(IsDeveloperVisible));
                 OnPropertyChanged(nameof(IsStartupVisible));
                 OnPropertyChanged(nameof(IsNetworkVisible));
+                OnPropertyChanged(nameof(IsAmdGpuVisible));
+                OnPropertyChanged(nameof(IsNvidiaGpuVisible));
+                OnPropertyChanged(nameof(IsGpuAuditVisible));
+                OnPropertyChanged(nameof(IsBenchmarkVisible));
                 OnPropertyChanged(nameof(IsSettingsVisible));
                 OnPropertyChanged(nameof(IsTweaksVisible));
                 OnPropertyChanged(nameof(IsSearchVisible));
                 OnPropertyChanged(nameof(CategorySubtitle));
-                FilteredTweaks.Refresh();
+                if (IsTweaksVisible)
+                    FilteredTweaks.Refresh();
 
                 if (value == "Информация")
                 {
@@ -531,6 +758,12 @@ public class MainViewModel : ObservableObject
                 {
                     RefreshNetworkAdapters();
                     _ = BenchmarkDnsCommandAction();
+                }
+                else if (IsGpuAuditVisible)
+                {
+                    _ = RefreshGpuAuditAsync();
+                    if (value == "AMD GPU")
+                        _ = RefreshAmdGpuTuningAsync();
                 }
                 else if (value == "Настройки")
                 {
@@ -570,6 +803,9 @@ public class MainViewModel : ObservableObject
     public ICommand SelectAppsSubTabCommand { get; }
     public ICommand InstallCatalogAppCommand { get; }
     public ICommand UninstallProgramCommand { get; }
+    public ICommand UninstallSelectedProgramsCommand { get; }
+    public ICommand ScanAppLeftoversCommand { get; }
+    public ICommand RemoveSelectedLeftoversCommand { get; }
     public ICommand RefreshInstalledProgramsCommand { get; }
     public ICommand RestoreStoreCommand { get; }
     public ICommand RestoreAllUwpCommand { get; }
@@ -594,6 +830,18 @@ public class MainViewModel : ObservableObject
     public ICommand ResetWinsockCommand { get; }
     public ICommand ToggleNagleCommand { get; }
     public ICommand RefreshAdaptersCommand { get; }
+    public ICommand RefreshGpuAuditCommand { get; }
+    public ICommand ApplyAmdGpuTuningCommand { get; }
+    public ICommand RefreshAmdGpuTuningCommand { get; }
+    public ICommand ResetAmdGpuTuningCommand { get; }
+    public ICommand ApplyAmdPowerLimitCommand { get; }
+    public ICommand ApplyAmdVramFrequencyCommand { get; }
+    public ICommand AddHighPerformanceGameProfileCommand { get; }
+    public ICommand RemoveGpuGameProfileCommand { get; }
+    public ICommand SelectGpuModuleTabCommand { get; }
+    public ICommand OpenGpuSystemSettingsCommand { get; }
+    public ICommand ImportBenchmarkCsvCommand { get; }
+    public ICommand CaptureBenchmarkCommand { get; }
 
     // Сетевой реаниматор
     public ICommand RescanPnpDevicesCommand { get; }
@@ -604,10 +852,28 @@ public class MainViewModel : ObservableObject
 
     public MainViewModel()
     {
+        LoadBenchmarkResults();
         OpenUpdateUrlCommand = new RelayCommand(() => UpdateCheckerService.OpenReleaseUrl(ReleaseUrl));
         DismissUpdateCommand = new RelayCommand(() => HasUpdateAvailable = false);
+        CheckForUpdatesCommand = new RelayCommand(async () => await ExecuteCheckForUpdatesAsync(showResult: true), () => !IsUpdateChecking && !IsUpdateInstalling);
+        InstallUpdateCommand = new RelayCommand(async () => await ExecuteInstallUpdateAsync(), () => CanInstallUpdate);
 
         ToggleHealthDetailsCommand = new RelayCommand(() => IsHealthDetailsOpen = !IsHealthDetailsOpen);
+        RefreshGpuAuditCommand = new RelayCommand(async () => await RefreshGpuAuditAsync(), () => !IsGlobalBusy);
+        RefreshAmdGpuTuningCommand = new RelayCommand(async () => await RefreshAmdGpuTuningAsync(), () => !IsAmdGpuTuningBusy);
+        ApplyAmdGpuTuningCommand = new RelayCommand(async () => await ApplyAmdGpuTuningAsync(), () => IsAmdGpuTuningAvailable && !IsAmdGpuTuningBusy);
+        ResetAmdGpuTuningCommand = new RelayCommand(async () => await ResetAmdGpuTuningAsync(), () => HasAmdGpu && !IsAmdGpuTuningBusy);
+        ApplyAmdPowerLimitCommand = new RelayCommand(async () => await ApplyAmdPowerLimitAsync(), () => IsAmdPowerLimitAvailable && !IsAmdGpuTuningBusy);
+        ApplyAmdVramFrequencyCommand = new RelayCommand(async () => await ApplyAmdVramFrequencyAsync(), () => IsAmdVramFrequencyAvailable && !IsAmdGpuTuningBusy);
+        AddHighPerformanceGameProfileCommand = new RelayCommand(ExecuteAddHighPerformanceGameProfile);
+        RemoveGpuGameProfileCommand = new RelayCommand(ExecuteRemoveGpuGameProfile);
+        SelectGpuModuleTabCommand = new RelayCommand(parameter =>
+        {
+            if (int.TryParse(parameter?.ToString(), out var tab)) GpuModuleTabIndex = tab;
+        });
+        OpenGpuSystemSettingsCommand = new RelayCommand(ExecuteOpenGpuSystemSettings);
+        ImportBenchmarkCsvCommand = new RelayCommand(ExecuteImportBenchmarkCsv);
+        CaptureBenchmarkCommand = new RelayCommand(async parameter => await ExecuteCaptureBenchmarkAsync(parameter), _ => !IsBenchmarkCapturing);
 
         EnableUltimatePerformanceCommand = new RelayCommand(async () =>
         {
@@ -1259,6 +1525,11 @@ public class MainViewModel : ObservableObject
             catch (Exception ex) { MessageBox.Show(ex.Message, "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error); }
         });
 
+        UninstallSelectedProgramsCommand = new RelayCommand(async () => await ExecuteBatchUninstallAsync(),
+            () => SelectedUninstallCount > 0 && !IsGlobalBusy);
+        ScanAppLeftoversCommand = new RelayCommand(ExecuteScanAppLeftovers);
+        RemoveSelectedLeftoversCommand = new RelayCommand(async () => await ExecuteRemoveSelectedLeftoversAsync(), () => SelectedLeftoverCount > 0 && !IsGlobalBusy);
+
         RefreshInstalledProgramsCommand = new RelayCommand(async () => await RefreshInstalledProgramsAsync());
 
         RestoreStoreCommand = new RelayCommand(async () =>
@@ -1465,9 +1736,6 @@ public class MainViewModel : ObservableObject
             }
         });
 
-        RefreshAvailableDrives();
-        RefreshNetworkAdapters();
-        RefreshPowerPlan();
         RegisterTweaks();
         RefreshAuditHistory();
         RebuildBreadcrumbs(CurrentDiskPath);
@@ -1476,6 +1744,22 @@ public class MainViewModel : ObservableObject
     }
 
     private bool _initializationStarted;
+
+    // Navigation must know about the installed vendor before the asynchronous audit has
+    // finished, otherwise the only entry point to the GPU module would be hidden.
+    private void PrimeGpuNavigation()
+    {
+        try
+        {
+            var (hasAmd, hasNvidia) = GpuAuditService.DetectSupportedVendors();
+            HasAmdGpu = hasAmd;
+            HasNvidiaGpu = hasNvidia;
+        }
+        catch
+        {
+            // The full audit will report an unavailable adapter without blocking startup.
+        }
+    }
 
     public Task StartInitializationAsync()
     {
@@ -1568,6 +1852,377 @@ public class MainViewModel : ObservableObject
             }
         }
         catch { }
+    }
+
+    private Task? _gpuAuditRefreshTask;
+
+    private Task RefreshGpuAuditAsync()
+    {
+        if (_gpuAuditRefreshTask is { IsCompleted: false })
+            return _gpuAuditRefreshTask;
+
+        _gpuAuditRefreshTask = RefreshGpuAuditCoreAsync();
+        return _gpuAuditRefreshTask;
+    }
+
+    private async Task RefreshGpuAuditCoreAsync()
+    {
+        try
+        {
+            GpuAuditStatus = "Считывание конфигурации GPU и драйвера...";
+            var snapshot = await GpuAuditService.CollectAsync();
+
+            GpuAdapters.Clear();
+            foreach (var adapter in snapshot.Adapters) GpuAdapters.Add(adapter);
+
+            GpuAuditChecks.Clear();
+            foreach (var check in snapshot.Checks) GpuAuditChecks.Add(check);
+
+            GpuWindowsChecks.Clear();
+            foreach (var check in snapshot.WindowsChecks) GpuWindowsChecks.Add(check);
+
+            RefreshGpuGameProfiles();
+
+            HasAmdGpu = snapshot.HasAmd;
+            HasNvidiaGpu = snapshot.HasNvidia;
+            ActiveGpuAdapter = SelectedCategory == "NVIDIA GPU"
+                ? snapshot.Adapters.FirstOrDefault(adapter => adapter.Vendor == GpuVendor.Nvidia)
+                : snapshot.Adapters.FirstOrDefault(adapter => adapter.Vendor == GpuVendor.Amd)
+                    ?? snapshot.Adapters.FirstOrDefault(adapter => adapter.IsDiscrete)
+                    ?? snapshot.Adapters.FirstOrDefault();
+            GpuAuditStatus = ActiveGpuAdapter == null
+                ? "Видеоадаптер не обнаружен"
+                : $"Аудит обновлён: {ActiveGpuAdapter.Name}";
+        }
+        catch
+        {
+            GpuAuditStatus = "Не удалось прочитать конфигурацию GPU";
+        }
+    }
+
+    public Task RefreshAmdGpuTuningAsync() => RefreshAmdGpuTuningAsync(allowWhileBusy: false);
+
+    private async Task RefreshAmdGpuTuningAsync(bool allowWhileBusy)
+    {
+        if (IsAmdGpuTuningBusy && !allowWhileBusy)
+            return;
+
+        IsAmdGpuTuningBusy = true;
+        AmdGpuTuningStatus = "Проверяю AMD-адаптер и читаю параметры драйвера…";
+
+        try
+        {
+            // When the AMD page is opened, the hardware audit and tuning read can
+            // start together. Wait for that audit before deciding there is no AMD
+            // adapter, and share any audit already in progress.
+            if (SelectedCategory == "AMD GPU" && ActiveGpuAdapter?.Vendor != GpuVendor.Amd)
+                await RefreshGpuAuditAsync();
+
+            if (ActiveGpuAdapter?.Vendor != GpuVendor.Amd)
+            {
+                IsAmdGpuTuningAvailable = false;
+                IsAmdPowerLimitAvailable = false;
+                IsAmdVramFrequencyAvailable = false;
+                AmdGpuTuningStatus = ActiveGpuAdapter?.Vendor == GpuVendor.Nvidia
+                    ? "Для NVIDIA регуляторы появятся после подключения NVAPI."
+                    : "Ручная настройка доступна только для обнаруженного AMD-адаптера.";
+                AmdPowerLimitStatus = AmdGpuTuningStatus;
+                AmdVramStatus = AmdGpuTuningStatus;
+                return;
+            }
+
+            AmdGpuTuningStatus = "Чтение допустимых частот из драйвера AMD…";
+            var adapterName = ActiveGpuAdapter.Name;
+            var snapshot = await Task.Run(() => AmdAdlxTuningService.Read(adapterName));
+            IsAmdGpuTuningAvailable = snapshot.Available;
+            AmdGpuTuningStatus = snapshot.Status;
+            IsAmdPowerLimitAvailable = snapshot.PowerLimitAvailable;
+            AmdPowerLimitStatus = snapshot.PowerLimitStatus;
+            IsAmdVramFrequencyAvailable = snapshot.VramFrequencyAvailable;
+            AmdVramStatus = snapshot.VramStatus;
+            if (!snapshot.Available) return;
+
+            AmdGpuMinFrequencyLimit = snapshot.MinFrequencyLimit;
+            AmdGpuMaxFrequencyLimit = snapshot.MaxFrequencyLimit;
+            AmdGpuMinFrequencyStep = Math.Max(1, snapshot.MinFrequencyStep);
+            AmdGpuMaxFrequencyStep = Math.Max(1, snapshot.MaxFrequencyStep);
+            AmdGpuMinFrequency = snapshot.MinFrequency;
+            AmdGpuMaxFrequency = snapshot.MaxFrequency;
+            if (snapshot.PowerLimitAvailable)
+            {
+                AmdPowerLimitMin = snapshot.PowerLimitMin;
+                AmdPowerLimitMax = snapshot.PowerLimitMax;
+                AmdPowerLimitStep = Math.Max(1, snapshot.PowerLimitStep);
+                AmdPowerLimit = snapshot.PowerLimit;
+            }
+            if (snapshot.VramFrequencyAvailable)
+            {
+                AmdVramFrequencyMin = snapshot.VramFrequencyMin;
+                AmdVramFrequencyMax = snapshot.VramFrequencyMax;
+                AmdVramFrequencyStep = Math.Max(1, snapshot.VramFrequencyStep);
+                AmdVramFrequency = snapshot.VramFrequency;
+            }
+        }
+        finally
+        {
+            IsAmdGpuTuningBusy = false;
+        }
+    }
+
+    private async Task ApplyAmdGpuTuningAsync()
+    {
+        if (!IsAmdGpuTuningAvailable || ActiveGpuAdapter?.Vendor != GpuVendor.Amd) return;
+        if (AmdGpuMinFrequency > AmdGpuMaxFrequency)
+        {
+            AmdGpuTuningStatus = "Минимальная частота не может быть выше максимальной.";
+            return;
+        }
+
+        IsAmdGpuTuningBusy = true;
+        AmdGpuTuningStatus = "Передаю частоты в драйвер AMD…";
+        try
+        {
+            var result = await Task.Run(() => AmdAdlxTuningService.Apply(
+                ActiveGpuAdapter.Name,
+                (int)Math.Round(AmdGpuMinFrequency),
+                (int)Math.Round(AmdGpuMaxFrequency)));
+            AmdGpuTuningStatus = result.Message;
+            if (result.Success)
+                await RefreshAmdGpuTuningAsync(allowWhileBusy: true);
+        }
+        finally
+        {
+            IsAmdGpuTuningBusy = false;
+        }
+    }
+
+    private async Task ResetAmdGpuTuningAsync()
+    {
+        if (ActiveGpuAdapter?.Vendor != GpuVendor.Amd) return;
+        IsAmdGpuTuningBusy = true;
+        AmdGpuTuningStatus = "Сбрасываю настройки через драйвер AMD…";
+        try
+        {
+            var result = await Task.Run(() => AmdAdlxTuningService.ResetToFactory(ActiveGpuAdapter.Name));
+            AmdGpuTuningStatus = result.Message;
+            if (result.Success)
+                await RefreshAmdGpuTuningAsync(allowWhileBusy: true);
+        }
+        finally
+        {
+            IsAmdGpuTuningBusy = false;
+        }
+    }
+
+    private async Task ApplyAmdPowerLimitAsync()
+    {
+        if (!IsAmdPowerLimitAvailable || ActiveGpuAdapter?.Vendor != GpuVendor.Amd) return;
+        IsAmdGpuTuningBusy = true;
+        AmdGpuTuningStatus = "Передаю лимит мощности в драйвер AMD…";
+        try
+        {
+            var result = await Task.Run(() => AmdAdlxTuningService.ApplyPowerLimit(
+                ActiveGpuAdapter.Name, (int)Math.Round(AmdPowerLimit)));
+            AmdPowerLimitStatus = result.Message;
+            AmdGpuTuningStatus = result.Message;
+            if (result.Success)
+                await RefreshAmdGpuTuningAsync(allowWhileBusy: true);
+        }
+        finally
+        {
+            IsAmdGpuTuningBusy = false;
+        }
+    }
+
+    private async Task ApplyAmdVramFrequencyAsync()
+    {
+        if (!IsAmdVramFrequencyAvailable || ActiveGpuAdapter?.Vendor != GpuVendor.Amd) return;
+        IsAmdGpuTuningBusy = true;
+        AmdGpuTuningStatus = "Передаю частоту VRAM в драйвер AMD…";
+        try
+        {
+            var result = await Task.Run(() => AmdAdlxTuningService.ApplyVramFrequency(
+                ActiveGpuAdapter.Name, (int)Math.Round(AmdVramFrequency)));
+            AmdVramStatus = result.Message;
+            AmdGpuTuningStatus = result.Message;
+            if (result.Success)
+                await RefreshAmdGpuTuningAsync(allowWhileBusy: true);
+        }
+        finally
+        {
+            IsAmdGpuTuningBusy = false;
+        }
+    }
+
+    private void RefreshGpuGameProfiles()
+    {
+        GpuGameProfiles.Clear();
+        foreach (var profile in GpuAuditService.GetHighPerformanceProfiles()) GpuGameProfiles.Add(profile);
+    }
+
+    private void ExecuteAddHighPerformanceGameProfile()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Выберите EXE игры для профиля высокой производительности",
+            Filter = "Исполняемые файлы (*.exe)|*.exe",
+            CheckFileExists = true,
+            Multiselect = false
+        };
+        if (dialog.ShowDialog() != true) return;
+
+        try
+        {
+            GpuAuditService.SetHighPerformanceProfile(dialog.FileName);
+            RefreshGpuGameProfiles();
+            MessageBox.Show("Для этой игры выбран высокопроизводительный GPU Windows. Изменение вступит в силу при следующем запуске игры.", "GPU-профиль", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Не удалось сохранить GPU-профиль: {ex.Message}", "GPU-профиль", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void ExecuteOpenGpuSystemSettings(object? parameter)
+    {
+        var target = parameter?.ToString() switch
+        {
+            "graphics" => "ms-settings:display-advancedgraphics",
+            "display" => "ms-settings:display-advanced",
+            "device-manager" => "devmgmt.msc",
+            _ => null
+        };
+        if (string.IsNullOrWhiteSpace(target)) return;
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = target, UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Не удалось открыть системную страницу GPU.\n\n{ex.Message}", "GPU", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private void ExecuteImportBenchmarkCsv(object? parameter)
+    {
+        var isBaseline = string.Equals(parameter?.ToString(), "baseline", StringComparison.OrdinalIgnoreCase);
+        var dialog = new OpenFileDialog
+        {
+            Title = isBaseline ? "Выберите замер ДО (PresentMon CSV)" : "Выберите замер ПОСЛЕ (PresentMon CSV)",
+            Filter = "PresentMon CSV (*.csv)|*.csv|Все файлы (*.*)|*.*"
+        };
+        if (dialog.ShowDialog() != true) return;
+
+        try
+        {
+            var result = FrameTimeBenchmarkService.ImportPresentMonCsv(dialog.FileName);
+            if (isBaseline) BenchmarkBaseline = result;
+            else BenchmarkAfter = result;
+            OnPropertyChanged(nameof(HasBenchmarkBaseline));
+            OnPropertyChanged(nameof(HasBenchmarkAfter));
+            OnPropertyChanged(nameof(HasBenchmarkComparison));
+            OnPropertyChanged(nameof(BenchmarkAverageFpsDelta));
+            OnPropertyChanged(nameof(BenchmarkTelemetryComparisonText));
+            SaveBenchmarkResults();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Не удалось разобрать замер.\n\n{ex.Message}", "Бенчмарк", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private async Task ExecuteCaptureBenchmarkAsync(object? parameter)
+    {
+        var isBaseline = string.Equals(parameter?.ToString(), "baseline", StringComparison.OrdinalIgnoreCase);
+        var gameDialog = new OpenFileDialog
+        {
+            Title = "Выберите исполняемый файл игры для PresentMon",
+            Filter = "Исполняемые файлы (*.exe)|*.exe",
+            CheckFileExists = true
+        };
+        if (gameDialog.ShowDialog() != true) return;
+
+        var outputFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "HeroTweaker", "Benchmarks");
+        Directory.CreateDirectory(outputFolder);
+        var suffix = isBaseline ? "before" : "after";
+        var outputPath = Path.Combine(outputFolder, $"{Path.GetFileNameWithoutExtension(gameDialog.FileName)}-{suffix}-{DateTime.Now:yyyyMMdd-HHmmss}.csv");
+
+        IsBenchmarkCapturing = true;
+        BenchmarkStatus = $"Захват {Path.GetFileName(gameDialog.FileName)} · {BenchmarkDurationSeconds} сек. Запустите игру и повторите одну и ту же сцену.";
+        try
+        {
+            var result = await FrameTimeBenchmarkService.CaptureAsync(gameDialog.FileName, outputPath, BenchmarkDurationSeconds, ActiveGpuAdapter?.Name);
+            if (isBaseline) BenchmarkBaseline = result;
+            else BenchmarkAfter = result;
+            OnPropertyChanged(nameof(HasBenchmarkBaseline));
+            OnPropertyChanged(nameof(HasBenchmarkAfter));
+            OnPropertyChanged(nameof(HasBenchmarkComparison));
+            OnPropertyChanged(nameof(BenchmarkAverageFpsDelta));
+            OnPropertyChanged(nameof(BenchmarkTelemetryComparisonText));
+            SaveBenchmarkResults();
+            BenchmarkStatus = $"Готово: {result.SampleCount:N0} кадров. CSV: {outputPath}";
+        }
+        catch (Exception ex)
+        {
+            BenchmarkStatus = $"Захват не выполнен: {ex.Message}";
+        }
+        finally
+        {
+            IsBenchmarkCapturing = false;
+        }
+    }
+
+    private static string BenchmarkResultsPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "HeroTweaker", "Benchmarks", "comparison.json");
+
+    private void LoadBenchmarkResults()
+    {
+        try
+        {
+            var path = BenchmarkResultsPath;
+            if (!File.Exists(path)) return;
+            var stored = JsonSerializer.Deserialize<StoredBenchmarkResults>(File.ReadAllText(path));
+            if (stored == null) return;
+            BenchmarkBaseline = stored.Baseline;
+            BenchmarkAfter = stored.After;
+            OnPropertyChanged(nameof(HasBenchmarkBaseline));
+            OnPropertyChanged(nameof(HasBenchmarkAfter));
+            OnPropertyChanged(nameof(HasBenchmarkComparison));
+            OnPropertyChanged(nameof(BenchmarkAverageFpsDelta));
+            OnPropertyChanged(nameof(BenchmarkTelemetryComparisonText));
+        }
+        catch { /* Повреждённый файл истории не должен мешать запуску приложения. */ }
+    }
+
+    private void SaveBenchmarkResults()
+    {
+        try
+        {
+            var path = BenchmarkResultsPath;
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, JsonSerializer.Serialize(new StoredBenchmarkResults(BenchmarkBaseline, BenchmarkAfter), new JsonSerializerOptions { WriteIndented = true }));
+        }
+        catch { /* Сам захват важнее необязательного файла сравнения. */ }
+    }
+
+    private sealed record StoredBenchmarkResults(FrameTimeBenchmarkResult? Baseline, FrameTimeBenchmarkResult? After);
+
+    private void ExecuteRemoveGpuGameProfile(object? parameter)
+    {
+        if (parameter is not GpuGameProfile profile) return;
+        var confirmation = MessageBox.Show(
+            $"Удалить профиль высокой производительности для:\n{profile.ExecutablePath}?\n\nWindows снова будет выбирать GPU автоматически.",
+            "Удаление GPU-профиля", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (confirmation != MessageBoxResult.Yes) return;
+
+        try
+        {
+            GpuAuditService.RemoveProfile(profile.ExecutablePath);
+            RefreshGpuGameProfiles();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Не удалось удалить GPU-профиль: {ex.Message}", "GPU-профиль", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private void OnAdapterSelectionChanged()
@@ -1831,24 +2486,59 @@ public class MainViewModel : ObservableObject
 
     public void RefreshAvailableDrives()
     {
+        UpdateAvailableDrives(CollectAvailableDrives());
+    }
+
+    private async Task LoadAvailableDrivesAsync()
+    {
+        IsLoadingAvailableDrives = true;
         try
         {
-            AvailableDrives.Clear();
-            foreach (var d in DriveInfo.GetDrives().Where(d => d.IsReady))
-            {
-                string label = string.IsNullOrWhiteSpace(d.VolumeLabel) ? "Локальный диск" : d.VolumeLabel;
-                string root = d.RootDirectory.FullName;
-                string total = DiskItemModel.FormatBytes(d.TotalSize);
-                string free = DiskItemModel.FormatBytes(d.AvailableFreeSpace);
-
-                double usedBytes = (double)(d.TotalSize - d.AvailableFreeSpace);
-                double usedPercentage = Math.Round((usedBytes / d.TotalSize) * 100.0, 1);
-
-                string display = $"{d.Name.TrimEnd('\\')} ({label})";
-                AvailableDrives.Add(new DriveSelectModel(root, label, display, total, free, usedPercentage));
-            }
+            var drives = await Task.Run(CollectAvailableDrives);
+            UpdateAvailableDrives(drives);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            AddLog($"Не удалось загрузить список накопителей: {ex.Message}", LogLevel.Warning);
+        }
+        finally
+        {
+            IsLoadingAvailableDrives = false;
+        }
+    }
+
+    private static List<DriveSelectModel> CollectAvailableDrives()
+    {
+        var result = new List<DriveSelectModel>();
+        foreach (var drive in DriveInfo.GetDrives())
+        {
+            try
+            {
+                if (!drive.IsReady || drive.TotalSize <= 0) continue;
+                string label = string.IsNullOrWhiteSpace(drive.VolumeLabel) ? "Локальный диск" : drive.VolumeLabel;
+                string root = drive.RootDirectory.FullName;
+                string total = DiskItemModel.FormatBytes(drive.TotalSize);
+                string free = DiskItemModel.FormatBytes(drive.AvailableFreeSpace);
+
+                double usedBytes = (double)(drive.TotalSize - drive.AvailableFreeSpace);
+                double usedPercentage = Math.Round((usedBytes / drive.TotalSize) * 100.0, 1);
+
+                string display = $"{drive.Name.TrimEnd('\\')} ({label})";
+                result.Add(new DriveSelectModel(root, label, display, total, free, usedPercentage));
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+
+        return result;
+    }
+
+    private void UpdateAvailableDrives(IEnumerable<DriveSelectModel> drives)
+    {
+        AvailableDrives.Clear();
+        foreach (var drive in drives)
+            AvailableDrives.Add(drive);
+        OnPropertyChanged(nameof(DriveInventoryStatus));
     }
 
     private void RebuildBreadcrumbs(string path)
@@ -1888,10 +2578,126 @@ public class MainViewModel : ObservableObject
         {
             var list = await AppManagerService.GetInstalledProgramsAsync();
             InstalledPrograms.Clear();
-            foreach (var p in list) InstalledPrograms.Add(p);
+            foreach (var p in list)
+            {
+                p.PropertyChanged += (_, e) =>
+                {
+                    if (e.PropertyName == nameof(InstalledProgramModel.IsSelected))
+                        OnPropertyChanged(nameof(SelectedUninstallCount));
+                };
+                InstalledPrograms.Add(p);
+            }
             FilteredInstalledPrograms.Refresh();
+            OnPropertyChanged(nameof(SelectedUninstallCount));
         }
         catch { }
+    }
+
+    private async Task ExecuteBatchUninstallAsync()
+    {
+        var selected = InstalledPrograms.Where(program => program.IsSelected).ToList();
+        if (selected.Count == 0) return;
+
+        var confirmation = MessageBox.Show(
+            $"Удалить выбранные программы: {selected.Count}?\n\n" +
+            "Для записей с QuietUninstallString будет использован тихий деинсталлятор. " +
+            "Для остальных Windows может показать штатное окно удаления.",
+            "Очередь деинсталляции", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        if (confirmation != MessageBoxResult.Yes) return;
+
+        IsGlobalBusy = true;
+        try
+        {
+            foreach (var program in selected)
+            {
+                var command = program.SupportsQuietUninstall ? program.QuietUninstallString : program.UninstallString;
+                program.RemovalStatus = program.SupportsQuietUninstall ? "Удаление без интерфейса…" : "Ожидание штатного деинсталлятора…";
+                StatusMessage = $"Удаление: {program.DisplayName}";
+                try
+                {
+                    var exitCode = await AppManagerService.RunUninstallAndWaitAsync(command);
+                    program.RemovalStatus = exitCode == 0 ? "Завершено" : $"Код завершения: {exitCode}";
+                }
+                catch (Exception ex)
+                {
+                    program.RemovalStatus = $"Ошибка: {ex.Message}";
+                }
+            }
+
+            await RefreshInstalledProgramsAsync();
+            UpdateAppLeftovers(selected);
+        }
+        finally
+        {
+            IsGlobalBusy = false;
+            StatusMessage = string.Empty;
+        }
+    }
+
+    private void ExecuteScanAppLeftovers()
+    {
+        var selected = InstalledPrograms.Where(program => program.IsSelected).ToList();
+        if (selected.Count == 0)
+        {
+            MessageBox.Show("Выберите программы, для которых нужно проверить оставшиеся каталоги.", "Поиск остатков", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        UpdateAppLeftovers(selected);
+    }
+
+    private void UpdateAppLeftovers(IEnumerable<InstalledProgramModel> programs)
+    {
+        AppLeftovers.Clear();
+        foreach (var item in AppManagerService.FindPotentialLeftovers(programs))
+        {
+            item.PropertyChanged += (_, eventArgs) =>
+            {
+                if (eventArgs.PropertyName == nameof(AppLeftoverModel.IsSelected))
+                    OnPropertyChanged(nameof(SelectedLeftoverCount));
+            };
+            AppLeftovers.Add(item);
+        }
+        OnPropertyChanged(nameof(HasAppLeftovers));
+        OnPropertyChanged(nameof(SelectedLeftoverCount));
+    }
+
+    private async Task ExecuteRemoveSelectedLeftoversAsync()
+    {
+        var selected = AppLeftovers.Where(item => item.IsSelected).ToList();
+        if (selected.Count == 0) return;
+        var confirmation = MessageBox.Show(
+            $"Переместить в Корзину выбранные остатки: {selected.Count}?\n\nБудут затронуты только отмеченные каталоги из списка ниже.",
+            "Очистка остатков", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        if (confirmation != MessageBoxResult.Yes) return;
+
+        IsGlobalBusy = true;
+        try
+        {
+            await Task.Run(() =>
+            {
+                foreach (var item in selected)
+                {
+                    try
+                    {
+                        if (Directory.Exists(item.Path))
+                        {
+                            Microsoft.VisualBasic.FileIO.FileSystem.DeleteDirectory(
+                                item.Path,
+                                Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,
+                                Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
+                        }
+                    }
+                    catch { }
+                }
+            });
+            foreach (var item in selected) AppLeftovers.Remove(item);
+            OnPropertyChanged(nameof(HasAppLeftovers));
+            OnPropertyChanged(nameof(SelectedLeftoverCount));
+        }
+        finally
+        {
+            IsGlobalBusy = false;
+        }
     }
 
     private void StartRealTimeTelemetry()
@@ -2117,40 +2923,59 @@ public class MainViewModel : ObservableObject
         try
         {
             IsAppLoading = true;
-            SplashProgress = 15;
-            SplashStatus = "Инициализация модулей Hero Engineering...";
-            await Task.Delay(200);
-
-            SplashProgress = 40;
-            SplashStatus = "Считывание конфигурации системы и реестра...";
+            SplashProgress = 10;
+            SplashStatus = "Открытие интерфейса…";
+            await Task.Yield();
+            // Load volumes independently: DriveInfo may wait on disconnected volumes,
+            // and must not delay the first dashboard render.
+            _ = LoadAvailableDrivesAsync();
+            var tweakCount = Math.Max(1, _allTweaks.Count);
+            IProgress<int> tweakProgress = new Progress<int>(completed =>
+                SplashProgress = 10 + (int)Math.Round(45d * completed / tweakCount));
             await Task.Run(() =>
             {
-                foreach (var t in _allTweaks) t.RefreshState();
+                for (var index = 0; index < _allTweaks.Count; index++)
+                {
+                    _allTweaks[index].RefreshState();
+                    if (index % 4 == 3 || index == _allTweaks.Count - 1)
+                        tweakProgress.Report(index + 1);
+                }
             });
-            await Task.Delay(180);
 
-            SplashProgress = 70;
-            SplashStatus = "Инициализация сетевых адаптеров...";
-            RefreshNetworkAdapters();
-            await Task.Delay(180);
+            // Network, registry and power-plan queries may block on driver/WMI state.
+            // Keep them off the WPF dispatcher so the splash and window animation stay responsive.
+            var networkTask = Task.Run(NetworkOptimizerService.GetAllPhysicalAdapters);
+            var vendorTask = Task.Run(GpuAuditService.DetectSupportedVendors);
+            var powerPlanTask = Task.Run(GetActivePowerPlanName);
+            await Task.WhenAll(networkTask, vendorTask, powerPlanTask);
+            var adapters = networkTask.Result;
+            AvailableAdapters.Clear();
+            foreach (var adapter in adapters) AvailableAdapters.Add(adapter);
+            if (SelectedAdapter == null || !AvailableAdapters.Any(adapter => adapter.Name == SelectedAdapter.Name))
+                SelectedAdapter = AvailableAdapters.FirstOrDefault(adapter => adapter.IsDefaultRoute)
+                    ?? AvailableAdapters.FirstOrDefault(adapter => adapter.IsUp)
+                    ?? AvailableAdapters.FirstOrDefault();
+            else OnAdapterSelectionChanged();
+            HasAmdGpu = vendorTask.Result.HasAmd;
+            HasNvidiaGpu = vendorTask.Result.HasNvidia;
+            ActivePowerPlanName = powerPlanTask.Result;
+
+            SplashProgress = 75;
+            SplashStatus = "Загрузка сведений о видеокарте…";
+            await RefreshGpuAuditAsync();
 
             SplashProgress = 90;
-            SplashStatus = "Сбор аппаратных метрик процессора и памяти...";
-            try
-            {
-                var sysInfoTask = SystemInfoService.GetSystemInfoAsync();
-                if (await Task.WhenAny(sysInfoTask, Task.Delay(350)) == sysInfoTask)
-                {
-                    SysInfo = await sysInfoTask;
-                }
-            }
-            catch { }
+            SplashStatus = "Чтение сведений о системе…";
+            try { SysInfo = await SystemInfoService.GetSystemInfoAsync(); } catch { }
 
             SplashProgress = 100;
-            SplashStatus = "Готово к работе!";
-            await Task.Delay(250);
+            SplashStatus = "Готово";
         }
-        catch { }
+        catch (Exception ex)
+        {
+            SplashStatus = "Часть сведений недоступна; интерфейс продолжит работу.";
+            AddLog($"Ошибка начальной загрузки: {ex.Message}", LogLevel.Warning);
+        }
         finally
         {
             IsAppLoading = false;
@@ -2163,26 +2988,105 @@ public class MainViewModel : ObservableObject
         }
     }
 
+    private static string GetActivePowerPlanName()
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "powercfg",
+                Arguments = "/getactivescheme",
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var process = Process.Start(psi);
+            if (process != null)
+            {
+                var line = process.StandardOutput.ReadToEnd();
+                process.WaitForExit(1000);
+                var openIndex = line.IndexOf('(');
+                var closeIndex = line.IndexOf(')');
+                if (openIndex >= 0 && closeIndex > openIndex)
+                    return line.Substring(openIndex + 1, closeIndex - openIndex - 1);
+            }
+        }
+        catch { }
+        return "Сбалансированная";
+    }
+
     private async Task CheckUpdatesInBackgroundAsync()
     {
         try
         {
-            var updateTask = UpdateCheckerService.CheckForUpdatesAsync();
-            if (await Task.WhenAny(updateTask, Task.Delay(2500)) == updateTask)
-            {
-                var updateResult = await updateTask;
-                if (updateResult.HasUpdate)
-                {
-                    Application.Current?.Dispatcher?.Invoke(() =>
-                    {
-                        HasUpdateAvailable = true;
-                        LatestVersionTag = updateResult.LatestTag;
-                        ReleaseUrl = updateResult.ReleaseUrl;
-                    });
-                }
-            }
+            var result = await UpdateCheckerService.CheckForUpdatesAsync();
+            Application.Current?.Dispatcher?.Invoke(() => ApplyUpdateCheckResult(result));
         }
         catch { }
+    }
+
+    private async Task ExecuteCheckForUpdatesAsync(bool showResult)
+    {
+        if (IsUpdateChecking || IsUpdateInstalling) return;
+        IsUpdateChecking = true;
+        UpdateStatus = "Проверяю стабильный релиз GitHub...";
+        try
+        {
+            var result = await UpdateCheckerService.CheckForUpdatesAsync();
+            ApplyUpdateCheckResult(result);
+            if (showResult)
+                MessageBox.Show(UpdateStatus, "HeroTweaker — обновления", MessageBoxButton.OK,
+                    result.HasUpdate && result.CanInstall ? MessageBoxImage.Information : MessageBoxImage.None);
+        }
+        finally
+        {
+            IsUpdateChecking = false;
+            OnPropertyChanged(nameof(CanInstallUpdate));
+            CommandManager.InvalidateRequerySuggested();
+        }
+    }
+
+    private void ApplyUpdateCheckResult(UpdateCheckResult result)
+    {
+        _availableUpdate = result;
+        HasUpdateAvailable = result.HasUpdate;
+        LatestVersionTag = result.LatestTag;
+        ReleaseUrl = result.ReleaseUrl;
+        UpdateStatus = result.Status;
+        OnPropertyChanged(nameof(CanInstallUpdate));
+        CommandManager.InvalidateRequerySuggested();
+    }
+
+    private async Task ExecuteInstallUpdateAsync()
+    {
+        var update = _availableUpdate;
+        if (update == null || !update.CanInstall || IsUpdateInstalling) return;
+        IsUpdateInstalling = true;
+        UpdateProgress = 0;
+        UpdateStatus = $"Загрузка {update.LatestTag}...";
+        try
+        {
+            var progress = new Progress<double>(value =>
+            {
+                UpdateProgress = value;
+                UpdateStatus = value < 70
+                    ? $"Скачивание обновления {value:F0}%..."
+                    : value < 100 ? "Проверка архива и подготовка файлов..." : "Обновление подготовлено. Перезапускаю HeroTweaker...";
+            });
+            await SelfUpdateService.DownloadVerifyAndLaunchAsync(update, progress);
+            Application.Current?.Shutdown();
+        }
+        catch (Exception ex)
+        {
+            UpdateStatus = $"Обновление не установлено: {ex.Message}";
+            MessageBox.Show(UpdateStatus, "HeroTweaker — обновление", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        finally
+        {
+            IsUpdateInstalling = false;
+            OnPropertyChanged(nameof(CanInstallUpdate));
+            CommandManager.InvalidateRequerySuggested();
+        }
     }
 
     private async Task ExecuteApplyPendingAsync()

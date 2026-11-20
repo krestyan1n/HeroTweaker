@@ -14,6 +14,8 @@ public static class DiskCacheService
     private const uint CacheMagicHeader = 0x48544443; // "HTDC"
     private const byte CacheFormatVersion = 4; // Добавлено время сканирования
     private static readonly TimeSpan CacheLifetime = TimeSpan.FromMinutes(15);
+    private const int MaxCachedItems = 100_000;
+    private const long MaxCacheFileBytes = 64L * 1024 * 1024;
 
     private static readonly string CacheDirectory = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -64,12 +66,13 @@ public static class DiskCacheService
     {
         if (!IsCacheEnabled || string.IsNullOrWhiteSpace(path)) return null;
 
-        string normPath = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar);
+        string normPath = NormalizePath(path);
 
         // 1. Проверка оперативного кэша L1
         if (MemoryCache.TryGetValue(normPath, out var memEntry))
         {
-            if (DateTime.UtcNow - memEntry.CachedAt < CacheLifetime)
+            var age = DateTime.UtcNow - memEntry.CachedAt;
+            if (age >= TimeSpan.Zero && age < CacheLifetime)
             {
                 return (memEntry.Slices, memEntry.Level1, memEntry.TotalSize);
             }
@@ -87,18 +90,22 @@ public static class DiskCacheService
                 using var fs = new FileStream(cacheFile, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.SequentialScan);
                 using var br = new BinaryReader(fs);
 
-                if (br.ReadUInt32() != CacheMagicHeader) return null;
-                if (br.ReadByte() != CacheFormatVersion) return null;
+                if (fs.Length > MaxCacheFileBytes) { TryDelete(cacheFile); return null; }
+                if (br.ReadUInt32() != CacheMagicHeader) { TryDelete(cacheFile); return null; }
+                if (br.ReadByte() != CacheFormatVersion) { TryDelete(cacheFile); return null; }
 
                 string storedPath = br.ReadString();
                 if (!normPath.Equals(storedPath, StringComparison.OrdinalIgnoreCase)) return null;
 
                 var cachedAt = new DateTime(br.ReadInt64(), DateTimeKind.Utc);
-                if (DateTime.UtcNow - cachedAt >= CacheLifetime) return null;
+                var age = DateTime.UtcNow - cachedAt;
+                if (age < TimeSpan.Zero || age >= CacheLifetime) { TryDelete(cacheFile); return null; }
 
                 long totalSize = br.ReadInt64();
+                if (totalSize < 0 || fs.Position + sizeof(int) > fs.Length) { TryDelete(cacheFile); return null; }
 
                 int slicesCount = br.ReadInt32();
+                if (slicesCount < 0 || slicesCount > MaxCachedItems) { TryDelete(cacheFile); return null; }
                 var slices = new List<DiskItemModel>(slicesCount);
                 for (int i = 0; i < slicesCount; i++)
                 {
@@ -106,17 +113,20 @@ public static class DiskCacheService
                 }
 
                 int level1Count = br.ReadInt32();
+                if (level1Count < 0 || level1Count > MaxCachedItems) { TryDelete(cacheFile); return null; }
                 var level1 = new List<DiskItemModel>(level1Count);
                 for (int i = 0; i < level1Count; i++)
                 {
                     level1.Add(ReadItem(br));
                 }
+                if (fs.Position != fs.Length) { TryDelete(cacheFile); return null; }
 
-                MemoryCache[normPath] = (DateTime.UtcNow, slices, level1, totalSize);
+                MemoryCache[normPath] = (cachedAt, slices, level1, totalSize);
                 return (slices, level1, totalSize);
             }
             catch
             {
+                TryDelete(cacheFile);
                 return null;
             }
         });
@@ -126,7 +136,7 @@ public static class DiskCacheService
     {
         if (!IsCacheEnabled || string.IsNullOrWhiteSpace(path)) return;
 
-        string normPath = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar);
+        string normPath = NormalizePath(path);
         var slicesList = allSlices.ToList();
         var level1List = level1Items.ToList();
 
@@ -140,26 +150,29 @@ public static class DiskCacheService
                     Directory.CreateDirectory(CacheDirectory);
 
                 string cacheFile = GetCacheFilePath(normPath);
-                string tempFile = cacheFile + ".tmp";
+                string tempFile = cacheFile + "." + Guid.NewGuid().ToString("N") + ".tmp";
 
-                using (var fs = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None, 65536, FileOptions.SequentialScan))
-                using (var bw = new BinaryWriter(fs))
+                try
                 {
-                    bw.Write(CacheMagicHeader);
-                    bw.Write(CacheFormatVersion);
-                    bw.Write(normPath);
-                    bw.Write(DateTime.UtcNow.Ticks);
-                    bw.Write(totalSize);
+                    using (var fs = new FileStream(tempFile, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, FileOptions.SequentialScan))
+                    using (var bw = new BinaryWriter(fs))
+                    {
+                        bw.Write(CacheMagicHeader);
+                        bw.Write(CacheFormatVersion);
+                        bw.Write(normPath);
+                        bw.Write(DateTime.UtcNow.Ticks);
+                        bw.Write(totalSize);
 
-                    bw.Write(slicesList.Count);
-                    foreach (var s in slicesList) WriteItem(bw, s);
+                        bw.Write(slicesList.Count);
+                        foreach (var s in slicesList) WriteItem(bw, s);
 
-                    bw.Write(level1List.Count);
-                    foreach (var l in level1List) WriteItem(bw, l);
+                        bw.Write(level1List.Count);
+                        foreach (var l in level1List) WriteItem(bw, l);
+                    }
+
+                    File.Move(tempFile, cacheFile, true);
                 }
-
-                if (File.Exists(cacheFile)) File.Delete(cacheFile);
-                File.Move(tempFile, cacheFile);
+                finally { TryDelete(tempFile); }
             }
             catch { }
         });
@@ -184,11 +197,34 @@ public static class DiskCacheService
         try
         {
             if (!Directory.Exists(CacheDirectory)) return 0;
-            return new DirectoryInfo(CacheDirectory)
-                .EnumerateFiles("*", SearchOption.AllDirectories)
-                .Sum(f => f.Length);
+            long total = 0;
+            foreach (var file in new DirectoryInfo(CacheDirectory).EnumerateFiles("*", SearchOption.AllDirectories))
+            {
+                if (file.Name.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase) ||
+                    DateTime.UtcNow - file.LastWriteTimeUtc >= CacheLifetime ||
+                    file.LastWriteTimeUtc - DateTime.UtcNow > TimeSpan.FromMinutes(5))
+                {
+                    TryDelete(file.FullName);
+                    continue;
+                }
+                total += file.Length;
+            }
+            return total;
         }
         catch { return 0; }
+    }
+
+    private static string NormalizePath(string path)
+    {
+        var full = Path.GetFullPath(path);
+        return string.Equals(full, Path.GetPathRoot(full), StringComparison.OrdinalIgnoreCase)
+            ? full
+            : full.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+    }
+
+    private static void TryDelete(string path)
+    {
+        try { if (File.Exists(path)) File.Delete(path); } catch { }
     }
 
     private static string GetCacheFilePath(string path)

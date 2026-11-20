@@ -1,0 +1,9 @@
+LibreHardwareMonitorLib 0.9.6
+Copyright (c) LibreHardwareMonitor contributors
+
+This application uses the unmodified LibreHardwareMonitorLib package to read optional hardware sensors.
+The library is licensed under the Mozilla Public License 2.0 (MPL-2.0).
+
+License text: https://www.mozilla.org/MPL/2.0/
+Source code for this version: https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/tree/3d331e3370efb858411f19511373eff65a218701
+Project: https://github.com/LibreHardwareMonitor/LibreHardwareMonitor

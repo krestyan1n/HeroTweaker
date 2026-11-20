@@ -4,7 +4,7 @@
         xmlns:helpers="clr-namespace:HeroTweaker.Core.Helpers"
         xmlns:converters="clr-namespace:HeroTweaker.Converters"
         xmlns:controls="clr-namespace:HeroTweaker.Controls"
-        Title="HeroTweaker v0.8.9.1"
+        Title="{Binding AppWindowTitle}"
         Icon="pack://application:,,,/Hero.ico"
         Height="860" Width="1280"
         MinHeight="720" MinWidth="1040"
@@ -23,6 +23,8 @@
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
         <converters:CategoryActiveConverter x:Key="CategoryActiveConverter" />
+        <converters:CategoryActiveBrushConverter x:Key="CategoryActiveBrushConverter" />
+        <converters:IndexActiveBrushConverter x:Key="IndexActiveBrushConverter" />
 
         <SolidColorBrush x:Key="WindowBgBrush" Color="#0B0F11" />
         <SolidColorBrush x:Key="SidebarBgBrush" Color="#0E1315" />
@@ -475,7 +477,10 @@
                             <Border.RenderTransform>
                                 <TranslateTransform x:Name="NavLift" Y="0"/>
                             </Border.RenderTransform>
-                            <ContentPresenter VerticalAlignment="Center"/>
+                            <Grid>
+                                <ContentPresenter VerticalAlignment="Center"/>
+                                <Border Height="2" Background="{DynamicResource CyanAccentBrush}" CornerRadius="1" VerticalAlignment="Bottom" Opacity="0" x:Name="ActiveLine"/>
+                            </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -496,8 +501,39 @@
                                     </BeginStoryboard>
                                 </Trigger.ExitActions>
                             </Trigger>
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding Background, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource CategoryActiveBrushConverter}}" Value="True"/>
+                                </MultiDataTrigger.Conditions>
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+                                <Setter TargetName="NavSurface" Property="BorderBrush" Value="#315765"/>
+                                <Setter TargetName="ActiveLine" Property="Opacity" Value="1"/>
+                            </MultiDataTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Быстрый вход в отдельный GPU-раздел в правой части навигации -->
+        <Style x:Key="GpuNavButtonStyle" TargetType="Button" BasedOn="{StaticResource TopNavButtonStyle}">
+            <Setter Property="Padding" Value="9,5"/>
+            <Setter Property="Margin" Value="6,0,0,0"/>
+            <Setter Property="FontSize" Value="10.5"/>
+            <Setter Property="BorderBrush" Value="#315765"/>
+        </Style>
+
+        <Style x:Key="GpuModuleTabButtonStyle" TargetType="Button" BasedOn="{StaticResource DarkCardButtonStyle}">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="BorderBrush" Value="#315765"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Background">
+                <Setter.Value>
+                    <MultiBinding Converter="{StaticResource IndexActiveBrushConverter}">
+                        <Binding Path="DataContext.GpuModuleTabIndex" RelativeSource="{RelativeSource Self}"/>
+                        <Binding Path="Tag" RelativeSource="{RelativeSource Self}"/>
+                    </MultiBinding>
                 </Setter.Value>
             </Setter>
         </Style>
@@ -681,7 +717,7 @@
 
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="104" />
+            <RowDefinition Height="136" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
@@ -697,7 +733,7 @@
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="58" />
-                    <RowDefinition Height="46" />
+                    <RowDefinition Height="78" />
                 </Grid.RowDefinitions>
 
                 <!-- Ряд 1: бренд, телеметрия, действия и кастомный chrome -->
@@ -714,7 +750,7 @@
                         </Border>
                         <StackPanel VerticalAlignment="Center">
                             <TextBlock Text="HeroTweaker" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/>
-                            <TextBlock Text="SYSTEM OPTIMIZATION UTILITY  ·  v0.8.9.1" FontFamily="Cascadia Mono" FontSize="8.5" Foreground="{DynamicResource TextMutedBrush}" Margin="0,1,0,0"/>
+                            <TextBlock Text="{Binding AppVersionDisplay, StringFormat='SYSTEM OPTIMIZATION UTILITY  ·  v{0}'}" FontFamily="Cascadia Mono" FontSize="8.5" Foreground="{DynamicResource TextMutedBrush}" Margin="0,1,0,0"/>
                         </StackPanel>
                     </StackPanel>
 
@@ -736,6 +772,7 @@
                     </StackPanel>
 
                     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,12,0">
+                        <Button Content="{Binding UpdateActionText}" Command="{Binding CheckForUpdatesCommand}" Style="{StaticResource DarkCardButtonStyle}" Padding="10,5" Margin="0,0,5,0" FontSize="10.5" ToolTip="Проверить GitHub Releases и при наличии ZIP обновить приложение"/>
                         <Button Content="История" Command="{Binding ToggleHistoryCommand}" Style="{StaticResource DarkCardButtonStyle}" Padding="10,5" Margin="0,0,5,0" FontSize="10.5"/>
                         <Button Content="Бэкап ОС" Command="{Binding CreateRestorePointCommand}" Style="{StaticResource DarkCardButtonStyle}" Padding="10,5" Margin="0,0,5,0" FontSize="10.5"/>
                         <Button Content="Explorer" Command="{Binding RestartExplorerCommand}" Style="{StaticResource CyanActionButtonStyle}" Padding="11,5" FontSize="10.5"/>
@@ -751,33 +788,65 @@
                 <!-- Ряд 2: горизонтальная навигация -->
                 <Border Grid.Row="1" BorderBrush="#29373C" BorderThickness="0,1,0,0" Background="#121A1E">
                     <Grid x:Name="TopNavigationHost">
-                        <Border x:Name="ActiveNavIndicator" Width="0" Height="2" Background="{DynamicResource CyanAccentBrush}" CornerRadius="1" HorizontalAlignment="Left" VerticalAlignment="Bottom" IsHitTestVisible="False" Panel.ZIndex="2">
-                            <Border.RenderTransform>
-                                <TranslateTransform x:Name="ActiveNavIndicatorTransform" X="0"/>
-                            </Border.RenderTransform>
-                            <Border.Effect>
-                                <DropShadowEffect Color="#8038BDF8" BlurRadius="8" ShadowDepth="0" Opacity="0.8"/>
-                            </Border.Effect>
-                        </Border>
-                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Padding="20,6,20,6">
-                        <StackPanel Orientation="Horizontal">
-                            <Button x:Name="NavDashboard" Content="Сводка" Tag="Информация" Command="{Binding SelectCategoryCommand}" CommandParameter="Информация" Style="{StaticResource TopNavButtonStyle}"/>
-                            <Button x:Name="NavDisk" Content="Диск" Tag="Диск" Command="{Binding SelectCategoryCommand}" CommandParameter="Диск" Style="{StaticResource TopNavButtonStyle}"/>
-                            <Button x:Name="NavDrivers" Content="Драйверы" Tag="Драйверы" Command="{Binding SelectCategoryCommand}" CommandParameter="Драйверы" Style="{StaticResource TopNavButtonStyle}"/>
-                            <Button x:Name="NavApps" Content="Приложения" Tag="Приложения" Command="{Binding SelectCategoryCommand}" CommandParameter="Приложения" Style="{StaticResource TopNavButtonStyle}"/>
-                            <Button x:Name="NavDeveloper" Content="Developer" Tag="Developer" Command="{Binding SelectCategoryCommand}" CommandParameter="Developer" Style="{StaticResource TopNavButtonStyle}"/>
-                            <Button x:Name="NavStartup" Content="Автозагрузка" Tag="Автозагрузка" Command="{Binding SelectCategoryCommand}" CommandParameter="Автозагрузка" Style="{StaticResource TopNavButtonStyle}"/>
-                            <Button x:Name="NavNetwork" Content="Сеть &amp; Пинг" Tag="Сеть &amp; Пинг" Command="{Binding SelectCategoryCommand}" CommandParameter="Сеть &amp; Пинг" Style="{StaticResource TopNavButtonStyle}"/>
-                            <Separator Width="1" Height="20" Background="#3A474B" Margin="8,0"/>
-                            <Button x:Name="NavPrivacy" Content="Приватность" Tag="Приватность" Command="{Binding SelectCategoryCommand}" CommandParameter="Приватность" Style="{StaticResource TopNavButtonStyle}"/>
-                            <Button x:Name="NavPerformance" Content="Производительность" Tag="Производительность" Command="{Binding SelectCategoryCommand}" CommandParameter="Производительность" Style="{StaticResource TopNavButtonStyle}"/>
-                            <Button x:Name="NavServices" Content="Службы" Tag="Службы" Command="{Binding SelectCategoryCommand}" CommandParameter="Службы" Style="{StaticResource TopNavButtonStyle}"/>
-                            <Button x:Name="NavInterface" Content="Интерфейс" Tag="Интерфейс" Command="{Binding SelectCategoryCommand}" CommandParameter="Интерфейс" Style="{StaticResource TopNavButtonStyle}"/>
-                            <Button x:Name="NavUpdates" Content="Обновления" Tag="Обновления" Command="{Binding SelectCategoryCommand}" CommandParameter="Обновления" Style="{StaticResource TopNavButtonStyle}"/>
-                            <Separator Width="1" Height="20" Background="#3A474B" Margin="8,0"/>
-                            <Button x:Name="NavSettings" Content="Настройки" Tag="Настройки" Command="{Binding SelectCategoryCommand}" CommandParameter="Настройки" Style="{StaticResource TopNavButtonStyle}"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Margin="20,5">
+                            <Grid Margin="0,0,0,2">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="84"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                <TextBlock Text="ОСНОВНОЕ" FontFamily="Cascadia Mono" FontSize="8.5" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                <Button x:Name="NavDashboard" Content="Сводка" Tag="Информация" Command="{Binding SelectCategoryCommand}" CommandParameter="Информация" Style="{StaticResource TopNavButtonStyle}"/>
+                                <Button x:Name="NavDisk" Content="Диск" Tag="Диск" Command="{Binding SelectCategoryCommand}" CommandParameter="Диск" Style="{StaticResource TopNavButtonStyle}"/>
+                                <Button x:Name="NavDrivers" Content="Драйверы" Tag="Драйверы" Command="{Binding SelectCategoryCommand}" CommandParameter="Драйверы" Style="{StaticResource TopNavButtonStyle}"/>
+                                <Button x:Name="NavApps" Content="Приложения" Tag="Приложения" Command="{Binding SelectCategoryCommand}" CommandParameter="Приложения" Style="{StaticResource TopNavButtonStyle}"/>
+                                <Button x:Name="NavDeveloper" Content="Developer" Tag="Developer" Command="{Binding SelectCategoryCommand}" CommandParameter="Developer" Style="{StaticResource TopNavButtonStyle}"/>
+                                <Button x:Name="NavStartup" Content="Автозагрузка" Tag="Автозагрузка" Command="{Binding SelectCategoryCommand}" CommandParameter="Автозагрузка" Style="{StaticResource TopNavButtonStyle}"/>
+                                <Button x:Name="NavNetwork" Content="Сеть &amp; Пинг" Tag="Сеть &amp; Пинг" Command="{Binding SelectCategoryCommand}" CommandParameter="Сеть &amp; Пинг" Style="{StaticResource TopNavButtonStyle}"/>
+                                </StackPanel>
+                            </Grid>
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="84"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                <TextBlock Text="СИСТЕМА" FontFamily="Cascadia Mono" FontSize="8.5" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                <Button x:Name="NavPrivacy" Content="Приватность" Tag="Приватность" Command="{Binding SelectCategoryCommand}" CommandParameter="Приватность" Style="{StaticResource TopNavButtonStyle}"/>
+                                <Button x:Name="NavPerformance" Content="Производительность" Tag="Производительность" Command="{Binding SelectCategoryCommand}" CommandParameter="Производительность" Style="{StaticResource TopNavButtonStyle}"/>
+                                <Button x:Name="NavServices" Content="Службы" Tag="Службы" Command="{Binding SelectCategoryCommand}" CommandParameter="Службы" Style="{StaticResource TopNavButtonStyle}"/>
+                                <Button x:Name="NavInterface" Content="Интерфейс" Tag="Интерфейс" Command="{Binding SelectCategoryCommand}" CommandParameter="Интерфейс" Style="{StaticResource TopNavButtonStyle}"/>
+                                <Button x:Name="NavUpdates" Content="Обновления" Tag="Обновления" Command="{Binding SelectCategoryCommand}" CommandParameter="Обновления" Style="{StaticResource TopNavButtonStyle}"/>
+                                <Button x:Name="NavSettings" Content="Настройки" Tag="Настройки" Command="{Binding SelectCategoryCommand}" CommandParameter="Настройки" Style="{StaticResource TopNavButtonStyle}"/>
+                                <Button x:Name="NavBenchmark" Content="Бенчмарк" Tag="Бенчмарк" Command="{Binding SelectCategoryCommand}" CommandParameter="Бенчмарк" Style="{StaticResource TopNavButtonStyle}"/>
+                                </StackPanel>
+                            </Grid>
                         </StackPanel>
-                    </ScrollViewer>
+
+                        <Border Grid.Column="1" Margin="12,11,20,11" Padding="12,6" Background="#101C21" BorderBrush="#315765" BorderThickness="1" CornerRadius="11" Visibility="{Binding HasSupportedGpu, Converter={StaticResource BoolToVis}}">
+                            <Border.Effect>
+                                <DropShadowEffect Color="#4038BDF8" BlurRadius="10" ShadowDepth="0" Opacity="0.55"/>
+                            </Border.Effect>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Width="28" Height="28" Background="#17313D" CornerRadius="8" VerticalAlignment="Center">
+                                    <TextBlock Text="GPU" FontFamily="Cascadia Mono" FontWeight="Bold" FontSize="8" Foreground="{DynamicResource CyanAccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <StackPanel Grid.Column="1" Margin="9,0" VerticalAlignment="Center">
+                                    <TextBlock Text="GPU OPTIMIZATION" FontFamily="Cascadia Mono" FontWeight="Bold" FontSize="9" Foreground="{DynamicResource CyanAccentBrush}"/>
+                                    <TextBlock Text="Аудит и профили производительности" FontSize="9.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,0,0"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button x:Name="NavAmdGpu" Content="AMD" Tag="AMD GPU" Command="{Binding SelectCategoryCommand}" CommandParameter="AMD GPU" Style="{StaticResource GpuNavButtonStyle}" Visibility="{Binding HasAmdGpu, Converter={StaticResource BoolToVis}}"/>
+                                    <Button x:Name="NavNvidiaGpu" Content="NVIDIA" Tag="NVIDIA GPU" Command="{Binding SelectCategoryCommand}" CommandParameter="NVIDIA GPU" Style="{StaticResource GpuNavButtonStyle}" Visibility="{Binding HasNvidiaGpu, Converter={StaticResource BoolToVis}}"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </Grid>
                     </Grid>
                 </Border>
             </Grid>
@@ -806,7 +875,7 @@
                     <Border Background="#171D1D" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="8,5" Margin="0,12,0,0">
                         <DockPanel>
                             <Ellipse Width="6" Height="6" Fill="#70C17A" VerticalAlignment="Center" Margin="0,0,7,0"/>
-                            <TextBlock Text="NODE READY  //  v0.8.9.1" FontSize="8.5" FontWeight="Bold" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            <TextBlock Text="{Binding AppVersionDisplay, StringFormat='NODE READY  //  v{0}'}" FontSize="8.5" FontWeight="Bold" Foreground="{DynamicResource TextSecondaryBrush}"/>
                         </DockPanel>
                     </Border>
                 </StackPanel>
@@ -1072,13 +1141,16 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0" VerticalAlignment="Center">
                             <TextBlock Text="{Binding LatestVersionTag, StringFormat='🚀 Доступна новая версия: {0}'}" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/>
-                            <TextBlock Text="Нажмите кнопку справа для перехода на страницу релиза и скачивания свежей версии." FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            <TextBlock Text="{Binding UpdateStatus}" FontSize="10.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,2,10,0" TextWrapping="Wrap"/>
+                            <ProgressBar Height="4" Maximum="100" Value="{Binding UpdateProgress}" IsIndeterminate="{Binding IsUpdateChecking}" Visibility="{Binding IsUpdateInstalling, Converter={StaticResource BoolToVis}}" Margin="0,6,12,0" Background="#182023" Foreground="{DynamicResource CyanAccentBrush}" BorderThickness="0"/>
                         </StackPanel>
-                        <Button Grid.Column="1" Content="Скачать обновление" Command="{Binding OpenUpdateUrlCommand}" Style="{StaticResource CyanActionButtonStyle}" Padding="12,5" Margin="0,0,8,0"/>
-                        <Button Grid.Column="2" Content="✕" Command="{Binding DismissUpdateCommand}" Style="{StaticResource DarkCardButtonStyle}" Padding="8,4"/>
+                        <Button Grid.Column="1" Content="Скачать и установить" Command="{Binding InstallUpdateCommand}" IsEnabled="{Binding CanInstallUpdate}" Style="{StaticResource CyanActionButtonStyle}" Padding="12,5" Margin="0,0,6,0"/>
+                        <Button Grid.Column="2" Content="Открыть релиз" Command="{Binding OpenUpdateUrlCommand}" Style="{StaticResource DarkCardButtonStyle}" Padding="10,5" Margin="0,0,6,0"/>
+                        <Button Grid.Column="3" Content="✕" Command="{Binding DismissUpdateCommand}" Style="{StaticResource DarkCardButtonStyle}" Padding="8,4"/>
                     </Grid>
                 </Border>
 
@@ -1303,6 +1375,22 @@
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
+                                    <TextBlock Text="{Binding DriveInventoryStatus}"
+                                               TextWrapping="Wrap"
+                                               FontSize="11"
+                                               Foreground="{DynamicResource TextMutedBrush}"
+                                               Margin="2,8,2,2">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding AvailableDrives.Count}" Value="0">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
                                 </StackPanel>
                             </Border>
 
@@ -1529,6 +1617,7 @@
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
                         <!-- Шапка очистки -->
@@ -1625,6 +1714,246 @@
                     </Border>
                 </Grid>
 
+                <!-- GPU AUDIT: отображается только для обнаруженного вендора -->
+                <ScrollViewer x:Name="GpuAuditScrollViewer" VerticalScrollBarVisibility="Auto" Visibility="{Binding IsGpuAuditVisible, Converter={StaticResource BoolToVis}}">
+                    <StackPanel>
+                        <Border Background="#111B20" BorderBrush="{DynamicResource CyanAccentBrush}" BorderThickness="1" CornerRadius="16" Padding="18" Margin="0,0,0,12">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="GPU PERFORMANCE AUDIT" FontFamily="Cascadia Mono" FontWeight="Bold" FontSize="10" Foreground="{DynamicResource CyanAccentBrush}"/>
+                                    <TextBlock Text="{Binding ActiveGpuAdapter.Name, FallbackValue='Видеоадаптер'}" FontSize="21" FontWeight="Black" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,5,0,2"/>
+                                    <TextBlock Text="{Binding GpuAuditStatus}" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                </StackPanel>
+                                <Button Grid.Column="1" Content="↻ Обновить аудит" Command="{Binding RefreshGpuAuditCommand}" Style="{StaticResource CyanActionButtonStyle}" Padding="14,7" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+
+                        <Border Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="12" Padding="6" Margin="0,0,0,12">
+                            <UniformGrid Columns="4">
+                                <Button Content="Обзор" Tag="0" Command="{Binding SelectGpuModuleTabCommand}" CommandParameter="0" Style="{StaticResource GpuModuleTabButtonStyle}" Margin="0,0,3,0"/>
+                                <Button Content="Профили игр" Tag="1" Command="{Binding SelectGpuModuleTabCommand}" CommandParameter="1" Style="{StaticResource GpuModuleTabButtonStyle}" Margin="2,0"/>
+                                <Button Content="Диагностика Windows" Tag="2" Command="{Binding SelectGpuModuleTabCommand}" CommandParameter="2" Style="{StaticResource GpuModuleTabButtonStyle}" Margin="2,0"/>
+                                <Button Content="Драйвер и система" Tag="3" Command="{Binding SelectGpuModuleTabCommand}" CommandParameter="3" Style="{StaticResource GpuModuleTabButtonStyle}" Margin="3,0,0,0"/>
+                            </UniformGrid>
+                        </Border>
+
+                        <StackPanel Visibility="{Binding IsGpuOverviewVisible, Converter={StaticResource BoolToVis}}">
+                        <UniformGrid Columns="4" Margin="0,0,0,12">
+                            <Border Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="12" Padding="13" Margin="0,0,5,0">
+                                <StackPanel>
+                                    <TextBlock Text="ВЕНДОР" FontFamily="Cascadia Mono" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/>
+                                    <TextBlock Text="{Binding ActiveGpuAdapter.VendorName, FallbackValue='—'}" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,5,0,0"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="12" Padding="13" Margin="5,0">
+                                <StackPanel>
+                                    <TextBlock Text="ВИДЕОПАМЯТЬ" FontFamily="Cascadia Mono" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/>
+                                    <TextBlock Text="{Binding ActiveGpuAdapter.DedicatedMemoryFormatted, FallbackValue='—'}" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,5,0,0"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="12" Padding="13" Margin="5,0">
+                                <StackPanel>
+                                    <TextBlock Text="ДРАЙВЕР" FontFamily="Cascadia Mono" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/>
+                                    <TextBlock Text="{Binding ActiveGpuAdapter.DriverVersion, FallbackValue='—'}" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,5,0,0" TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="12" Padding="13" Margin="5,0,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="ТИП АДАПТЕРА" FontFamily="Cascadia Mono" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/>
+                                    <TextBlock Text="{Binding ActiveGpuAdapter.AdapterKind, FallbackValue='—'}" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,5,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+                        </UniformGrid>
+
+                        <Border Background="#0B1114" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="14" Padding="16" Margin="0,0,0,12" Visibility="{Binding IsAmdGpuVisible, Converter={StaticResource BoolToVis}}">
+                            <StackPanel>
+                                <Grid Margin="0,0,0,10">
+                                    <StackPanel>
+                                        <TextBlock Text="AMD / РУЧНАЯ НАСТРОЙКА ЧАСТОТ" FontFamily="Cascadia Mono" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource CyanAccentBrush}"/>
+                                        <TextBlock Text="Диапазоны читаются из драйвера через ADLX. Значения применяются только после нажатия кнопки." TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,5,0,0"/>
+                                    </StackPanel>
+                                    <Button Content="↻ Прочитать" Command="{Binding RefreshAmdGpuTuningCommand}" Style="{StaticResource DarkCardButtonStyle}" HorizontalAlignment="Right" VerticalAlignment="Top" Padding="10,5" Margin="8,0,0,0"/>
+                                </Grid>
+                                <Border Background="#10191D" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="12" IsEnabled="{Binding IsAmdGpuTuningAvailable}">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,3">
+                                            <TextBlock Text="Минимальная частота ядра" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            <TextBlock Text="{Binding AmdGpuMinFrequency, StringFormat={}{0:0} МГц}" FontFamily="Cascadia Mono" FontSize="11" Foreground="{DynamicResource CyanAccentBrush}" HorizontalAlignment="Right"/>
+                                        </Grid>
+                                        <Slider Minimum="{Binding AmdGpuMinFrequencyLimit}" Maximum="{Binding AmdGpuMaxFrequencyLimit}" Value="{Binding AmdGpuMinFrequency, UpdateSourceTrigger=PropertyChanged}" TickFrequency="{Binding AmdGpuMinFrequencyStep}" IsSnapToTickEnabled="True" Margin="0,0,0,10"/>
+                                        <Grid Margin="0,0,0,3">
+                                            <TextBlock Text="Максимальная частота ядра" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            <TextBlock Text="{Binding AmdGpuMaxFrequency, StringFormat={}{0:0} МГц}" FontFamily="Cascadia Mono" FontSize="11" Foreground="{DynamicResource CyanAccentBrush}" HorizontalAlignment="Right"/>
+                                        </Grid>
+                                        <Slider Minimum="{Binding AmdGpuMinFrequencyLimit}" Maximum="{Binding AmdGpuMaxFrequencyLimit}" Value="{Binding AmdGpuMaxFrequency, UpdateSourceTrigger=PropertyChanged}" TickFrequency="{Binding AmdGpuMaxFrequencyStep}" IsSnapToTickEnabled="True"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border Background="#10191D" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="12" Margin="0,8,0,0" IsEnabled="{Binding IsAmdPowerLimitAvailable}">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,3">
+                                            <TextBlock Text="Лимит мощности" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            <TextBlock Text="{Binding AmdPowerLimit, StringFormat={}{0:0}%}" FontFamily="Cascadia Mono" FontSize="11" Foreground="{DynamicResource CyanAccentBrush}" HorizontalAlignment="Right"/>
+                                        </Grid>
+                                        <Slider Minimum="{Binding AmdPowerLimitMin}" Maximum="{Binding AmdPowerLimitMax}" Value="{Binding AmdPowerLimit, UpdateSourceTrigger=PropertyChanged}" TickFrequency="{Binding AmdPowerLimitStep}" IsSnapToTickEnabled="True"/>
+                                    </StackPanel>
+                                </Border>
+                                <Grid Margin="0,8,0,0">
+                                    <TextBlock Text="{Binding AmdPowerLimitStatus}" TextWrapping="Wrap" FontSize="10" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="0,0,150,0"/>
+                                    <Button Content="Применить лимит" Command="{Binding ApplyAmdPowerLimitCommand}" Style="{StaticResource DarkCardButtonStyle}" HorizontalAlignment="Right" Padding="10,5" IsEnabled="{Binding IsAmdPowerLimitAvailable}"/>
+                                </Grid>
+                                <Border Background="#10191D" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="12" Margin="0,8,0,0" IsEnabled="{Binding IsAmdVramFrequencyAvailable}">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,3">
+                                            <TextBlock Text="Максимальная частота видеопамяти" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            <TextBlock Text="{Binding AmdVramFrequency, StringFormat={}{0:0} МГц}" FontFamily="Cascadia Mono" FontSize="11" Foreground="{DynamicResource CyanAccentBrush}" HorizontalAlignment="Right"/>
+                                        </Grid>
+                                        <Slider Minimum="{Binding AmdVramFrequencyMin}" Maximum="{Binding AmdVramFrequencyMax}" Value="{Binding AmdVramFrequency, UpdateSourceTrigger=PropertyChanged}" TickFrequency="{Binding AmdVramFrequencyStep}" IsSnapToTickEnabled="True"/>
+                                    </StackPanel>
+                                </Border>
+                                <Grid Margin="0,8,0,0">
+                                    <TextBlock Text="{Binding AmdVramStatus}" TextWrapping="Wrap" FontSize="10" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="0,0,170,0"/>
+                                    <Button Content="Применить VRAM" Command="{Binding ApplyAmdVramFrequencyCommand}" Style="{StaticResource DarkCardButtonStyle}" HorizontalAlignment="Right" Padding="10,5" IsEnabled="{Binding IsAmdVramFrequencyAvailable}"/>
+                                </Grid>
+                                <Grid Margin="0,9,0,0">
+                                    <TextBlock Text="{Binding AmdGpuTuningStatus}" TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,225,0"/>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                        <Button Content="Заводские" Command="{Binding ResetAmdGpuTuningCommand}" Style="{StaticResource DarkCardButtonStyle}" Padding="10,5" Margin="0,0,6,0" IsEnabled="{Binding HasAmdGpu}"/>
+                                        <Button Content="Применить" Command="{Binding ApplyAmdGpuTuningCommand}" Style="{StaticResource CyanActionButtonStyle}" Padding="12,5" IsEnabled="{Binding IsAmdGpuTuningAvailable}"/>
+                                    </StackPanel>
+                                </Grid>
+                                <TextBlock Text="Частоты меняют поведение карты под нагрузкой и могут вызвать нестабильность. Начинайте с небольших изменений; «Заводские» восстанавливает настройки драйвера." TextWrapping="Wrap" FontSize="10" Foreground="{DynamicResource TextMutedBrush}" Margin="0,8,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="#0B1114" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="14" Padding="16" Margin="0,0,0,12" Visibility="{Binding IsNvidiaGpuVisible, Converter={StaticResource BoolToVis}}">
+                            <StackPanel>
+                                <TextBlock Text="NVIDIA / РЕЖИМ ИССЛЕДОВАНИЯ" FontFamily="Cascadia Mono" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource CyanAccentBrush}"/>
+                                <TextBlock Text="Вкладка появляется только при обнаружении NVIDIA. Здесь доступны безопасная инвентаризация Windows, игровые профили высокой производительности, диагностика Game DVR/HAGS и проверяемые сведения о драйвере — без недокументированных флагов драйвера." TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,7,0,0"/>
+                            </StackPanel>
+                        </Border>
+                        </StackPanel>
+
+                        <StackPanel Visibility="{Binding IsGpuDiagnosticsVisible, Converter={StaticResource BoolToVis}}">
+                        <Border Background="#10191D" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="14" Padding="15" Margin="0,0,0,12">
+                            <StackPanel>
+                                <TextBlock Text="ДИАГНОСТИКА ГРАФИЧЕСКОГО СТЕКА WINDOWS" FontFamily="Cascadia Mono" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource CyanAccentBrush}"/>
+                                <TextBlock Text="Каждая строка ниже читается из конкретной настройки Windows. Здесь нет оценки FPS и нет автоматического применения спорных параметров." FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </Border>
+                        <TextBlock Text="ПРОВЕРКА КОНФИГУРАЦИИ" FontFamily="Cascadia Mono" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" Margin="2,2,0,8"/>
+                        <ItemsControl ItemsSource="{Binding GpuAuditChecks}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="12" Padding="14" Margin="0,0,0,8">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                                <TextBlock Text="{Binding Details}" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                                            </StackPanel>
+                                            <Border Grid.Column="1" Background="#112733" CornerRadius="8" Padding="9,5" Margin="16,0,0,0" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Value}" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource CyanAccentBrush}"/>
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Text="СОСТОЯНИЕ WINDOWS GAMING" FontFamily="Cascadia Mono" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" Margin="2,10,0,8"/>
+                        <ItemsControl ItemsSource="{Binding GpuWindowsChecks}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="#0B1114" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="12" Padding="14" Margin="0,0,0,8">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                                <TextBlock Text="{Binding Details}" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                                            </StackPanel>
+                                            <Border Grid.Column="1" Background="#112733" CornerRadius="8" Padding="9,5" Margin="16,0,0,0" VerticalAlignment="Center"><TextBlock Text="{Binding Value}" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource CyanAccentBrush}"/></Border>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button Content="Открыть системные настройки графики" Command="{Binding OpenGpuSystemSettingsCommand}" CommandParameter="graphics" Style="{StaticResource DarkCardButtonStyle}" Padding="12,6" HorizontalAlignment="Left" Margin="0,4,0,12"/>
+                        </StackPanel>
+
+                        <StackPanel Visibility="{Binding IsGpuProfilesVisible, Converter={StaticResource BoolToVis}}">
+                        <Grid Margin="2,10,0,8">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <TextBlock Text="ПРОФИЛИ ИГР WINDOWS" FontFamily="Cascadia Mono" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
+                            <Button Grid.Column="1" Content="＋ Добавить EXE" Command="{Binding AddHighPerformanceGameProfileCommand}" Style="{StaticResource DarkCardButtonStyle}" Padding="11,5" FontSize="10.5"/>
+                        </Grid>
+                        <Border Background="#0B1114" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="12" Padding="13" Margin="0,0,0,12">
+                            <StackPanel>
+                                <TextBlock Text="Профиль назначает выбранной игре высокопроизводительный GPU через настройки Windows. Это не фоновая служба и не изменяет глобальные параметры драйвера." FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,0,0,9"/>
+                                <ItemsControl ItemsSource="{Binding GpuGameProfiles}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{DynamicResource CardBgBrush}" CornerRadius="8" Padding="10,7" Margin="0,0,0,5">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding ExecutableName}" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                                        <TextBlock Text="{Binding ExecutablePath}" FontFamily="Cascadia Mono" FontSize="9" Foreground="{DynamicResource TextMutedBrush}" TextTrimming="CharacterEllipsis" MaxWidth="760"/>
+                                                    </StackPanel>
+                                                    <Button Grid.Column="1" Content="Убрать" Command="{Binding DataContext.RemoveGpuGameProfileCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Style="{StaticResource DarkCardButtonStyle}" Foreground="#FCA5A5" Padding="9,4" VerticalAlignment="Center"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                        </StackPanel>
+
+                        <StackPanel Visibility="{Binding IsGpuDriverVisible, Converter={StaticResource BoolToVis}}">
+                        <Border Background="#10191D" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="14" Padding="16" Margin="0,0,0,12">
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="ДРАЙВЕР И ВОССТАНОВЛЕНИЕ" FontFamily="Cascadia Mono" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource CyanAccentBrush}"/>
+                                    <TextBlock Text="HeroTweaker не разгоняет карту и не записывает недокументированные флаги драйвера. Здесь — проверяемая инвентаризация и штатные точки входа Windows." FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button Content="Параметры дисплея" Command="{Binding OpenGpuSystemSettingsCommand}" CommandParameter="display" Style="{StaticResource DarkCardButtonStyle}" Padding="10,5" Margin="0,0,6,0"/>
+                                    <Button Content="Диспетчер устройств" Command="{Binding OpenGpuSystemSettingsCommand}" CommandParameter="device-manager" Style="{StaticResource DarkCardButtonStyle}" Padding="10,5"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                        <TextBlock Text="ОБНАРУЖЕННЫЕ АДАПТЕРЫ" FontFamily="Cascadia Mono" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" Margin="2,10,0,8"/>
+                        <ItemsControl ItemsSource="{Binding GpuAdapters}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="#0B1114" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="12" Padding="13" Margin="0,0,0,8">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                                <TextBlock Text="{Binding HardwareIdShort}" FontFamily="Cascadia Mono" FontSize="9.5" Foreground="{DynamicResource TextMutedBrush}" Margin="0,4,0,0"/>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1" HorizontalAlignment="Right">
+                                                <TextBlock Text="{Binding DriverDate}" FontSize="10.5" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Right"/>
+                                                <TextBlock Text="{Binding DedicatedMemoryFormatted}" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource CyanAccentBrush}" HorizontalAlignment="Right" Margin="0,4,0,0"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+
                 <!-- 4. ПРИЛОЖЕНИЯ & TOOLBOX -->
                 <Grid Visibility="{Binding IsAppsVisible, Converter={StaticResource BoolToVis}}">
                     <Grid.RowDefinitions>
@@ -1634,7 +1963,7 @@
                     <Border Grid.Row="0" Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="12" Padding="6" Margin="0,0,0,12">
                         <UniformGrid Columns="3">
                             <Button Content="📦 Каталог ПО (Toolbox)" Command="{Binding SelectAppsSubTabCommand}" CommandParameter="0" Style="{StaticResource DarkCardButtonStyle}" Margin="0,0,3,0"/>
-                            <Button Content="🗑️ Установленные программы" Command="{Binding SelectAppsSubTabCommand}" CommandParameter="1" Style="{StaticResource DarkCardButtonStyle}" Margin="2,0,2,0"/>
+                            <Button Content="🗑️ Деинсталлятор" Command="{Binding SelectAppsSubTabCommand}" CommandParameter="1" Style="{StaticResource DarkCardButtonStyle}" Margin="2,0,2,0"/>
                             <Button Content="🔄 Восстановление UWP" Command="{Binding SelectAppsSubTabCommand}" CommandParameter="2" Style="{StaticResource DarkCardButtonStyle}" Margin="3,0,0,0"/>
                         </UniformGrid>
                     </Border>
@@ -1672,26 +2001,70 @@
                         </ItemsControl>
                     </ScrollViewer>
                     <Grid Grid.Row="1" Visibility="{Binding IsInstalledSubTabVisible, Converter={StaticResource BoolToVis}}">
-                        <ScrollViewer x:Name="InstalledScrollViewer" VerticalScrollBarVisibility="Auto">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Border Grid.Row="0" Background="#10191D" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="13" Margin="0,0,0,10">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="ОЧЕРЕДЬ ДЕИНСТАЛЛЯЦИИ" FontFamily="Cascadia Mono" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource CyanAccentBrush}"/>
+                                    <TextBlock Text="{Binding SelectedUninstallCount, StringFormat='Выбрано программ: {0}'}" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,3,0,0"/>
+                                    <TextBlock Text="Тихий режим используется только при наличии официальной QuietUninstall-команды приложения." FontSize="10" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button Content="↻" Command="{Binding RefreshInstalledProgramsCommand}" Style="{StaticResource DarkCardButtonStyle}" Padding="9,5" Margin="0,0,6,0" ToolTip="Обновить список"/>
+                                    <Button Content="Найти остатки" Command="{Binding ScanAppLeftoversCommand}" Style="{StaticResource DarkCardButtonStyle}" Padding="10,5" Margin="0,0,6,0"/>
+                                    <Button Content="В Корзину выбранное" Command="{Binding RemoveSelectedLeftoversCommand}" Style="{StaticResource DarkCardButtonStyle}" Foreground="#FCA5A5" Padding="10,5" Margin="0,0,6,0"/>
+                                    <Button Content="Удалить выбранные" Command="{Binding UninstallSelectedProgramsCommand}" Style="{StaticResource CyanActionButtonStyle}" Padding="12,5"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                        <ScrollViewer x:Name="InstalledScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto">
                             <ItemsControl ItemsSource="{Binding FilteredInstalledPrograms}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <Border Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="12,8" Margin="0,0,0,6">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="30"/>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="120"/>
                                                     <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0" Text="{Binding DisplayName}" FontSize="12.5" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center"/>
-                                                <TextBlock Grid.Column="1" Text="{Binding DisplayVersion}" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                                                <Button Grid.Column="2" Content="Удалить" Command="{Binding DataContext.UninstallProgramCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Style="{StaticResource DarkCardButtonStyle}" Foreground="#F87171" Padding="10,4"/>
+                                                <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding DisplayName}" FontSize="12.5" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                                    <TextBlock Text="{Binding Publisher}" FontSize="9.5" Foreground="{DynamicResource TextMutedBrush}" TextTrimming="CharacterEllipsis"/>
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="2" Text="{Binding DisplayVersion}" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                                <Button Grid.Column="3" Content="Удалить" Command="{Binding DataContext.UninstallProgramCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Style="{StaticResource DarkCardButtonStyle}" Foreground="#F87171" Padding="10,4"/>
                                             </Grid>
                                         </Border>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
                         </ScrollViewer>
+                        <ItemsControl Grid.Row="2" ItemsSource="{Binding AppLeftovers}" Visibility="{Binding HasAppLeftovers, Converter={StaticResource BoolToVis}}" Margin="0,10,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="#151316" BorderBrush="#5E3B45" BorderThickness="1" CornerRadius="8" Padding="9,6" Margin="0,0,0,4">
+                                        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="26"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                            <CheckBox IsChecked="{Binding IsSelected}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                            <StackPanel Grid.Column="1">
+                                                <TextBlock Text="{Binding ProgramName, StringFormat='Возможный остаток: {0}'}" FontSize="10.5" FontWeight="Bold" Foreground="#FCA5A5"/>
+                                                <TextBlock Text="{Binding Path}" FontFamily="Cascadia Mono" FontSize="9.5" Foreground="{DynamicResource TextSecondaryBrush}" TextTrimming="CharacterEllipsis"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </Grid>
                     <ScrollViewer x:Name="RestoreScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto" Visibility="{Binding IsRestoreSubTabVisible, Converter={StaticResource BoolToVis}}">
                         <StackPanel>
@@ -2033,7 +2406,119 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <!-- 8. ТВIКИ ОС -->
+                <!-- 8. FRAME-TIME BENCHMARK -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding IsBenchmarkVisible, Converter={StaticResource BoolToVis}}">
+                    <StackPanel>
+                        <Border Background="#111B20" BorderBrush="{DynamicResource CyanAccentBrush}" BorderThickness="1" CornerRadius="16" Padding="18" Margin="0,0,0,12">
+                            <StackPanel>
+                                <TextBlock Text="FRAME-TIME BENCHMARK" FontFamily="Cascadia Mono" FontWeight="Bold" FontSize="10" Foreground="{DynamicResource CyanAccentBrush}"/>
+                                <TextBlock Text="Сравнение двух реальных захватов PresentMon. HeroTweaker не показывает рейтинг, проценты пользы или FPS без файла измерения." FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,7,0,0" TextWrapping="Wrap"/>
+                                <TextBlock Text="Для честного сравнения используйте одну сцену, разрешение, пресет, API и версию драйвера до и после изменения." FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="#10191D" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="14" Padding="14" Margin="0,0,0,12">
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="ЗАХВАТ ИГРОВОЙ СЕССИИ" FontFamily="Cascadia Mono" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource CyanAccentBrush}"/>
+                                    <TextBlock Text="PresentMon записывает frametime игры в CSV. Для ETW-захвата запустите HeroTweaker от администратора или добавьте себя в Performance Log Users. Повторите одинаковую сцену для обоих замеров." FontSize="10.5" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,4,12,0"/>
+                                    <TextBlock Text="{Binding BenchmarkStatus}" FontSize="10" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,5,12,0"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,10,0">
+                                    <TextBlock Text="СЕКУНДЫ" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/>
+                                    <TextBox Text="{Binding BenchmarkDurationSeconds, UpdateSourceTrigger=PropertyChanged}" Width="66" Margin="0,3,0,0"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                    <Button Content="Снять ДО" Command="{Binding CaptureBenchmarkCommand}" CommandParameter="baseline" Style="{StaticResource DarkCardButtonStyle}" Padding="12,5" Margin="0,0,0,5"/>
+                                    <Button Content="Снять ПОСЛЕ" Command="{Binding CaptureBenchmarkCommand}" CommandParameter="after" Style="{StaticResource CyanActionButtonStyle}" Padding="12,5"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <Grid Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="14" Padding="15" Margin="0,0,6,0">
+                                <StackPanel>
+                                    <TextBlock Text="01 / ДО ИЗМЕНЕНИЙ" FontFamily="Cascadia Mono" FontWeight="Bold" FontSize="10" Foreground="{DynamicResource TextMutedBrush}"/>
+                                    <TextBlock Text="{Binding BenchmarkBaseline.SourceFileName, TargetNullValue='CSV ещё не импортирован'}" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,7,0,0" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding BenchmarkBaseline.SampleCount, StringFormat='Кадров в замере: {0}', TargetNullValue='Нет данных'}" FontSize="10.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,3,0,9"/>
+                                    <Button Content="Импортировать CSV ДО" Command="{Binding ImportBenchmarkCsvCommand}" CommandParameter="baseline" Style="{StaticResource DarkCardButtonStyle}" Padding="12,5" HorizontalAlignment="Left"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Column="1" Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="14" Padding="15" Margin="6,0,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="02 / ПОСЛЕ ИЗМЕНЕНИЙ" FontFamily="Cascadia Mono" FontWeight="Bold" FontSize="10" Foreground="{DynamicResource CyanAccentBrush}"/>
+                                    <TextBlock Text="{Binding BenchmarkAfter.SourceFileName, TargetNullValue='CSV ещё не импортирован'}" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,7,0,0" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding BenchmarkAfter.SampleCount, StringFormat='Кадров в замере: {0}', TargetNullValue='Нет данных'}" FontSize="10.5" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,3,0,9"/>
+                                    <Button Content="Импортировать CSV ПОСЛЕ" Command="{Binding ImportBenchmarkCsvCommand}" CommandParameter="after" Style="{StaticResource CyanActionButtonStyle}" Padding="12,5" HorizontalAlignment="Left"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <Border Background="#0F171A" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="14" Padding="16">
+                            <StackPanel>
+                                <TextBlock Text="РЕЗУЛЬТАТЫ ИЗ ИМПОРТИРОВАННЫХ КАДРОВ" FontFamily="Cascadia Mono" FontWeight="Bold" FontSize="10" Foreground="{DynamicResource CyanAccentBrush}" Margin="0,0,0,10"/>
+                                <TextBlock Text="Нет замера после изменений. Запишите захват PresentMon или импортируйте CSV." FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,10">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding HasBenchmarkAfter}" Value="False">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <UniformGrid Columns="5">
+                                    <StackPanel Margin="0,0,10,0"><TextBlock Text="AVG FPS" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/><TextBlock Text="{Binding BenchmarkAfter.AverageFpsText, TargetNullValue='—'}" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/></StackPanel>
+                                    <StackPanel Margin="0,0,10,0"><TextBlock Text="1% LOW" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/><TextBlock Text="{Binding BenchmarkAfter.OnePercentLowText, TargetNullValue='—'}" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/></StackPanel>
+                                    <StackPanel Margin="0,0,10,0"><TextBlock Text="0.1% LOW" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/><TextBlock Text="{Binding BenchmarkAfter.PointOnePercentLowText, TargetNullValue='—'}" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/></StackPanel>
+                                    <StackPanel Margin="0,0,10,0"><TextBlock Text="P99 FRAME TIME" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/><TextBlock Text="{Binding BenchmarkAfter.P99FrameTimeText, TargetNullValue='—'}" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/></StackPanel>
+                                    <StackPanel><TextBlock Text="AVG FPS Δ" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/><TextBlock Text="{Binding BenchmarkAverageFpsDelta}" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource CyanAccentBrush}"/></StackPanel>
+                                </UniformGrid>
+                                <TextBlock Text="ТЕЛЕМЕТРИЯ СЕССИИ · среднее за интервал захвата" FontFamily="Cascadia Mono" FontWeight="Bold" FontSize="9" Foreground="{DynamicResource CyanAccentBrush}" Margin="0,14,0,7"/>
+                                <UniformGrid Columns="5">
+                                    <StackPanel Margin="0,0,10,0"><TextBlock Text="CPU ИГРЫ / ВСЕ ЯДРА" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/><TextBlock Text="{Binding BenchmarkAfter.AverageGameCpuPercent, StringFormat={}{0:F1}%, TargetNullValue=—}" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/></StackPanel>
+                                    <StackPanel Margin="0,0,10,0"><TextBlock Text="RAM ИГРЫ · WORKING SET" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/><TextBlock Text="{Binding BenchmarkAfter.AverageGameWorkingSetMb, StringFormat={}{0:F0} МБ, TargetNullValue=—}" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/></StackPanel>
+                                    <StackPanel Margin="0,0,10,0"><TextBlock Text="GPU ИГРЫ · МАКС. ДВИЖОК" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/><TextBlock Text="{Binding BenchmarkAfter.AverageGameGpuEnginePercent, StringFormat={}{0:F1}%, TargetNullValue=—}" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/></StackPanel>
+                                    <StackPanel Margin="0,0,10,0"><TextBlock Text="VRAM ИГРЫ · DEDICATED" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/><TextBlock Text="{Binding BenchmarkAfter.AverageGameDedicatedGpuMemoryMb, StringFormat={}{0:F0} МБ, TargetNullValue=—}" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/></StackPanel>
+                                    <StackPanel><TextBlock Text="CPU СИСТЕМЫ" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/><TextBlock Text="{Binding BenchmarkAfter.AverageSystemCpuPercent, StringFormat={}{0:F1}%, TargetNullValue=—}" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/></StackPanel>
+                                </UniformGrid>
+                                <UniformGrid Columns="5" Margin="0,8,0,0">
+                                    <StackPanel Margin="0,0,10,0"><TextBlock Text="GPU СИСТЕМЫ · BUSIEST ENGINE" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/><TextBlock Text="{Binding BenchmarkAfter.AverageSystemGpuBusyPercent, StringFormat={}{0:F1}%, TargetNullValue=—}" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/></StackPanel>
+                                    <StackPanel Margin="0,0,10,0"><TextBlock Text="GPU BUSY ИГРЫ / КАДР" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/><TextBlock Text="{Binding BenchmarkAfter.AverageGameGpuBusyMs, StringFormat={}{0:F2} мс, TargetNullValue=—}" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/></StackPanel>
+                                    <StackPanel Margin="0,0,10,0"><TextBlock Text="VRAM ИГРЫ · SHARED" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/><TextBlock Text="{Binding BenchmarkAfter.AverageGameSharedGpuMemoryMb, StringFormat={}{0:F0} МБ, TargetNullValue=—}" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/></StackPanel>
+                                    <StackPanel Margin="0,0,10,0"><TextBlock Text="RAM СИСТЕМЫ" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/><TextBlock Text="{Binding BenchmarkAfter.AverageSystemUsedMemoryGb, StringFormat={}{0:F1} ГБ, TargetNullValue=—}" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/></StackPanel>
+                                    <StackPanel><TextBlock Text="RAM СИСТЕМЫ · ЗАНЯТО" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/><TextBlock Text="{Binding BenchmarkAfter.AverageSystemMemoryPercent, StringFormat={}{0:F0}%, TargetNullValue=—}" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/></StackPanel>
+                                </UniformGrid>
+                                <UniformGrid Columns="6" Margin="0,8,0,0">
+                                    <StackPanel Margin="0,0,8,0"><TextBlock Text="GPU LOAD · SENSOR" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/><TextBlock Text="{Binding BenchmarkAfter.AverageGpuLoadPercent, StringFormat={}{0:F1}%, TargetNullValue=—}" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/></StackPanel>
+                                    <StackPanel Margin="0,0,8,0"><TextBlock Text="GPU CORE" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/><TextBlock Text="{Binding BenchmarkAfter.AverageGpuTemperatureC, StringFormat={}{0:F1} °C, TargetNullValue=—}" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/></StackPanel>
+                                    <StackPanel Margin="0,0,8,0"><TextBlock Text="GPU HOTSPOT" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/><TextBlock Text="{Binding BenchmarkAfter.AverageGpuHotspotTemperatureC, StringFormat={}{0:F1} °C, TargetNullValue=—}" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/></StackPanel>
+                                    <StackPanel Margin="0,0,8,0"><TextBlock Text="VRAM TEMP" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/><TextBlock Text="{Binding BenchmarkAfter.AverageGpuMemoryTemperatureC, StringFormat={}{0:F1} °C, TargetNullValue=—}" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/></StackPanel>
+                                    <StackPanel Margin="0,0,8,0"><TextBlock Text="GPU POWER" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/><TextBlock Text="{Binding BenchmarkAfter.AverageGpuPowerWatts, StringFormat={}{0:F0} Вт, TargetNullValue=—}" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/></StackPanel>
+                                    <StackPanel Margin="0,0,8,0"><TextBlock Text="GPU CLOCK" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/><TextBlock Text="{Binding BenchmarkAfter.AverageGpuClockMhz, StringFormat={}{0:F0} МГц, TargetNullValue=—}" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/></StackPanel>
+                                    <StackPanel><TextBlock Text="GPU FAN" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/><TextBlock Text="{Binding BenchmarkAfter.AverageGpuFanPercent, StringFormat={}{0:F0}%, TargetNullValue=—}" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}"/></StackPanel>
+                                </UniformGrid>
+                                <TextBlock Text="{Binding BenchmarkAfter.GpuSensorStatus, TargetNullValue='GPU-сенсоры пока не измерялись'}" FontSize="9" Foreground="{DynamicResource TextMutedBrush}" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                                <TextBlock Text="Секундные ряды сохраняются в отдельный JSON рядом с CSV. CPU игры нормализован по общей мощности всех логических ядер; GPU Busy/кадр — время кадра, а GPU Engine — счётчик Windows. Для GPU Engine показан наиболее занятый движок, не сумма процентов." FontSize="9" Foreground="{DynamicResource TextMutedBrush}" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                <Border Background="#0B1215" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="9" Padding="10,8" Margin="0,10,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="СРАВНЕНИЕ ТЕЛЕМЕТРИИ ДО → ПОСЛЕ · без единой синтетической оценки" FontFamily="Cascadia Mono" FontWeight="Bold" FontSize="9" Foreground="{DynamicResource CyanAccentBrush}"/>
+                                        <TextBlock Text="{Binding BenchmarkTelemetryComparisonText}" FontSize="9" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,5,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- 9. ТВIКИ ОС -->
                 <ScrollViewer x:Name="TweaksScrollViewer" VerticalScrollBarVisibility="Auto" Visibility="{Binding IsTweaksVisible, Converter={StaticResource BoolToVis}}">
                     <ItemsControl ItemsSource="{Binding FilteredTweaks}">
                         <ItemsControl.ItemTemplate>
@@ -2117,7 +2602,7 @@
                         <Border Background="{DynamicResource CardBgBrush}" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" CornerRadius="12" Padding="14">
                             <StackPanel>
                                 <TextBlock Text="О приложении HeroTweaker" FontSize="12.5" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,6"/>
-                                <TextBlock Text="Версия ядра: v0.8.9.1 • Hero Engineering" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11"/>
+                                <TextBlock Text="{Binding AppVersionDisplay, StringFormat='Версия ядра: v{0} • Hero Engineering'}" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>
@@ -2249,24 +2734,7 @@
 
         <!-- СПЛЭШ-СКРИН ЗАГРУЗКИ -->
         <Grid Grid.ColumnSpan="2" Background="#FA060910" Panel.ZIndex="9999" Visibility="{Binding IsAppLoading, Converter={StaticResource BoolToVis}}">
-            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Width="340" Opacity="0">
-                <StackPanel.RenderTransform>
-                    <TranslateTransform Y="10"/>
-                </StackPanel.RenderTransform>
-                <StackPanel.Triggers>
-                    <EventTrigger RoutedEvent="FrameworkElement.Loaded">
-                        <BeginStoryboard>
-                            <Storyboard>
-                                <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.20"/>
-                                <DoubleAnimation Storyboard.TargetProperty="RenderTransform.(TranslateTransform.Y)" From="10" To="0" Duration="0:0:0.24">
-                                    <DoubleAnimation.EasingFunction>
-                                        <CubicEase EasingMode="EaseOut"/>
-                                    </DoubleAnimation.EasingFunction>
-                                </DoubleAnimation>
-                            </Storyboard>
-                        </BeginStoryboard>
-                    </EventTrigger>
-                </StackPanel.Triggers>
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Width="340" Opacity="1">
                 <Border Width="88" Height="88" CornerRadius="18" Background="#171D1D" BorderBrush="{DynamicResource CyanAccentBrush}" BorderThickness="1.5" HorizontalAlignment="Center" Margin="0,0,20,0">
                     <Image Source="pack://application:,,,/Hero.ico" Width="60" Height="60" RenderOptions.BitmapScalingMode="HighQuality" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                 </Border>
@@ -2274,7 +2742,19 @@
                     <TextBlock Text="Hero" FontSize="26" FontWeight="Black" Foreground="{DynamicResource TextPrimaryBrush}" />
                     <TextBlock Text="Tweaker" FontSize="26" FontWeight="Light" Foreground="{DynamicResource CyanAccentBrush}" />
                 </StackPanel>
-                <TextBlock Text="Hero Engineering • v0.8.9.1" FontSize="10.5" Foreground="{DynamicResource CyanGlowBrush}" HorizontalAlignment="Center" Margin="0,0,0,20" FontWeight="SemiBold"/>
+                <TextBlock Text="{Binding AppVersionDisplay, StringFormat='Hero Engineering • v{0}'}" FontSize="10.5" Foreground="{DynamicResource CyanGlowBrush}" HorizontalAlignment="Center" Margin="0,0,0,20" FontWeight="SemiBold"/>
+                <Ellipse Width="20" Height="20" Stroke="{DynamicResource CyanAccentBrush}" StrokeThickness="2" StrokeDashArray="2,5" RenderTransformOrigin="0.5,0.5" HorizontalAlignment="Center" Margin="0,0,0,14">
+                    <Ellipse.RenderTransform><RotateTransform/></Ellipse.RenderTransform>
+                    <Ellipse.Triggers>
+                        <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+                            <BeginStoryboard>
+                                <Storyboard RepeatBehavior="Forever">
+                                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)" From="0" To="360" Duration="0:0:0.3"/>
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                    </Ellipse.Triggers>
+                </Ellipse>
                 <ProgressBar Value="{Binding SplashProgress}" Maximum="100" Height="3" Background="#182023" Foreground="{DynamicResource CyanAccentBrush}" BorderThickness="0" Margin="0,0,0,10"/>
                 <TextBlock Text="{Binding SplashStatus}" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center"/>
             </StackPanel>

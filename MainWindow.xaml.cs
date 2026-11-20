@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
@@ -13,6 +13,7 @@ using System.Windows.Threading;
 using System.Windows.Interop;
 using HeroTweaker.Core.Models;
 using HeroTweaker.Core.Services;
+using MessageBox = HeroTweaker.Core.Services.HeroDialog;
 using HeroTweaker.ViewModels;
 
 namespace HeroTweaker;
@@ -29,28 +30,32 @@ public partial class MainWindow : Window
 
     private static readonly string[] CategoryOrder =
     {
-        "Информация", "Диск", "Драйверы", "Приложения", "Developer", "Автозагрузка", "Сеть & Пинг",
-        "Приватность", "Производительность", "Службы", "Интерфейс", "Обновления", "Настройки"
+        "Информация", "Диск", "Драйверы", "AMD GPU", "NVIDIA GPU", "Приложения", "Developer", "Автозагрузка", "Сеть & Пинг",
+        "Приватность", "Производительность", "Службы", "Интерфейс", "Обновления", "Настройки", "Бенчмарк"
     };
 
     private string _previousCategory = "Информация";
 
-    public MainWindow()
+    public MainWindow() : this(new MainViewModel(), initializeOnLoad: true)
+    {
+    }
+
+    public MainWindow(MainViewModel viewModel, bool initializeOnLoad)
     {
         InitializeComponent();
 
         SourceInitialized += (_, _) => ApplyDarkWindowFrame();
         StateChanged += (_, _) => ApplyDarkWindowFrame();
 
-        DataContext = new MainViewModel();
+        DataContext = viewModel;
 
         Loaded += async (_, _) =>
         {
             if (DataContext is MainViewModel vm)
             {
                 vm.PropertyChanged += OnViewModelPropertyChanged;
-                await Dispatcher.InvokeAsync(() => PositionNavigationIndicator(false), DispatcherPriority.ContextIdle);
-                await vm.StartInitializationAsync();
+                if (initializeOnLoad)
+                    await vm.StartInitializationAsync();
             }
         };
     }
@@ -112,6 +117,7 @@ public partial class MainWindow : Window
                 TweaksScrollViewer?.ScrollToTop();
                 DashboardScrollViewer?.ScrollToTop();
                 NetworkScrollViewer?.ScrollToTop();
+                GpuAuditScrollViewer?.ScrollToTop();
                 DeveloperScrollViewer?.ScrollToTop();
                 StartupScrollViewer?.ScrollToTop();
                 SettingsScrollViewer?.ScrollToTop();
@@ -121,7 +127,6 @@ public partial class MainWindow : Window
                 DiskListScrollViewer?.ScrollToTop();
                 DiskCleanupScrollViewer?.ScrollToTop();
                 AnimateContentChange(previousCategory, currentCategory);
-                PositionNavigationIndicator(true);
             });
         }
         else if (e.PropertyName == nameof(MainViewModel.HoveredDiskItem))
@@ -155,53 +160,6 @@ public partial class MainWindow : Window
         return index < 0 ? 0 : index;
     }
 
-    private void PositionNavigationIndicator(bool animate)
-    {
-        if (DataContext is not MainViewModel vm || TopNavigationHost == null || ActiveNavIndicator == null || ActiveNavIndicatorTransform == null)
-            return;
-
-        var target = FindName($"Nav{GetNavigationName(vm.SelectedCategory)}") as FrameworkElement;
-        if (target == null || target.ActualWidth <= 0) return;
-
-        var point = target.TransformToAncestor(TopNavigationHost).Transform(new Point(0, 0));
-        var easing = new CubicEase { EasingMode = EasingMode.EaseOut };
-
-        if (!animate || ActiveNavIndicator.ActualWidth <= 0)
-        {
-            ActiveNavIndicator.BeginAnimation(WidthProperty, null);
-            ActiveNavIndicatorTransform.BeginAnimation(TranslateTransform.XProperty, null);
-            ActiveNavIndicator.Width = target.ActualWidth;
-            ActiveNavIndicatorTransform.X = point.X;
-            return;
-        }
-
-        ActiveNavIndicator.BeginAnimation(WidthProperty, new DoubleAnimation(target.ActualWidth, TimeSpan.FromMilliseconds(260))
-        {
-            EasingFunction = easing
-        });
-        ActiveNavIndicatorTransform.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(point.X, TimeSpan.FromMilliseconds(260))
-        {
-            EasingFunction = easing
-        });
-    }
-
-    private static string GetNavigationName(string category) => category switch
-    {
-        "Информация" => "Dashboard",
-        "Диск" => "Disk",
-        "Драйверы" => "Drivers",
-        "Приложения" => "Apps",
-        "Developer" => "Developer",
-        "Автозагрузка" => "Startup",
-        "Сеть & Пинг" => "Network",
-        "Приватность" => "Privacy",
-        "Производительность" => "Performance",
-        "Службы" => "Services",
-        "Интерфейс" => "Interface",
-        "Обновления" => "Updates",
-        "Настройки" => "Settings",
-        _ => "Dashboard"
-    };
 
     private void HighlightHoveredDiskRow(DiskItemModel? hovered, string currentRootPath)
     {

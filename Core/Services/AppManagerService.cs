@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Win32;
@@ -330,6 +331,8 @@ public static class AppManagerService
 
                             string version = subKey.GetValue("DisplayVersion") as string ?? "Неизвестно";
                             string publisher = subKey.GetValue("Publisher") as string ?? "Неизвестный издатель";
+                            string quietUninstallString = subKey.GetValue("QuietUninstallString") as string ?? string.Empty;
+                            string installLocation = subKey.GetValue("InstallLocation") as string ?? string.Empty;
 
                             string sizeFormatted = "";
                             if (subKey.GetValue("EstimatedSize") is int sizeKb)
@@ -343,6 +346,9 @@ public static class AppManagerService
                                 DisplayVersion = version,
                                 Publisher = publisher,
                                 UninstallString = uninstallString,
+                                QuietUninstallString = quietUninstallString,
+                                InstallLocation = installLocation,
+                                RegistryKeyPath = $"{hive}\\{path}\\{subKeyName}",
                                 EstimatedSize = sizeFormatted
                             });
                         }
@@ -357,46 +363,9 @@ public static class AppManagerService
 
     public static void RunUninstall(string uninstallString)
     {
-        if (string.IsNullOrWhiteSpace(uninstallString)) return;
-
         try
         {
-            string fileName = uninstallString;
-            string args = "";
-
-            if (uninstallString.StartsWith("\""))
-            {
-                int quoteIndex = uninstallString.IndexOf("\"", 1);
-                if (quoteIndex != -1)
-                {
-                    fileName = uninstallString.Substring(1, quoteIndex - 1);
-                    args = uninstallString.Substring(quoteIndex + 1).Trim();
-                }
-            }
-            else
-            {
-                int exeIndex = uninstallString.IndexOf(".exe", StringComparison.OrdinalIgnoreCase);
-                if (exeIndex != -1)
-                {
-                    fileName = uninstallString.Substring(0, exeIndex + 4);
-                    args = uninstallString.Substring(exeIndex + 4).Trim();
-                }
-                else
-                {
-                    int spaceIndex = uninstallString.IndexOf(" ");
-                    if (spaceIndex != -1)
-                    {
-                        fileName = uninstallString.Substring(0, spaceIndex);
-                        args = uninstallString.Substring(spaceIndex + 1);
-                    }
-                }
-            }
-
-            if (fileName.Contains("msiexec", StringComparison.OrdinalIgnoreCase))
-            {
-                fileName = "msiexec.exe";
-                args = uninstallString.Substring(uninstallString.IndexOf("msiexec", StringComparison.OrdinalIgnoreCase) + 7).Trim();
-            }
+            var (fileName, args) = ParseUninstallCommand(uninstallString);
 
             Process.Start(new ProcessStartInfo
             {
@@ -409,6 +378,110 @@ public static class AppManagerService
         {
             throw new Exception($"Не удалось запустить деинсталлятор.\nОшибка: {ex.Message}");
         }
+    }
+
+    public static async Task<int> RunUninstallAndWaitAsync(string uninstallString)
+    {
+        var (fileName, args) = ParseUninstallCommand(uninstallString);
+        return await Task.Run(() =>
+        {
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = fileName,
+                Arguments = args,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }) ?? throw new InvalidOperationException("Не удалось запустить деинсталлятор.");
+            process.WaitForExit();
+            return process.ExitCode;
+        });
+    }
+
+    public static IReadOnlyList<AppLeftoverModel> FindPotentialLeftovers(IEnumerable<InstalledProgramModel> programs)
+    {
+        var results = new List<AppLeftoverModel>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var roots = new[]
+        {
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData)
+        }.Where(Directory.Exists);
+
+        foreach (var program in programs)
+        {
+            void AddIfExisting(string path, string kind)
+            {
+                if (Directory.Exists(path) && seen.Add(path))
+                    results.Add(new AppLeftoverModel { ProgramName = program.DisplayName, Path = path, Kind = kind });
+            }
+
+            if (!string.IsNullOrWhiteSpace(program.InstallLocation))
+                AddIfExisting(program.InstallLocation, "Каталог установки");
+
+            var normalizedName = program.DisplayName.Replace(" ", string.Empty, StringComparison.Ordinal).Trim();
+            if (normalizedName.Length < 3) continue;
+            foreach (var root in roots)
+            {
+                try
+                {
+                    foreach (var directory in Directory.EnumerateDirectories(root))
+                    {
+                        var folderName = Path.GetFileName(directory).Replace(" ", string.Empty, StringComparison.Ordinal);
+                        if (folderName.Contains(normalizedName, StringComparison.OrdinalIgnoreCase) ||
+                            normalizedName.Contains(folderName, StringComparison.OrdinalIgnoreCase))
+                            AddIfExisting(directory, "Данные приложения");
+                    }
+                }
+                catch { }
+            }
+        }
+
+        return results.OrderBy(item => item.ProgramName).ThenBy(item => item.Path).ToList();
+    }
+
+    private static (string FileName, string Arguments) ParseUninstallCommand(string uninstallString)
+    {
+        if (string.IsNullOrWhiteSpace(uninstallString))
+            throw new ArgumentException("Команда деинсталляции отсутствует.", nameof(uninstallString));
+
+        string fileName = uninstallString;
+        string args = string.Empty;
+        if (uninstallString.StartsWith("\""))
+        {
+            int quoteIndex = uninstallString.IndexOf("\"", 1);
+            if (quoteIndex != -1)
+            {
+                fileName = uninstallString.Substring(1, quoteIndex - 1);
+                args = uninstallString.Substring(quoteIndex + 1).Trim();
+            }
+        }
+        else
+        {
+            int exeIndex = uninstallString.IndexOf(".exe", StringComparison.OrdinalIgnoreCase);
+            if (exeIndex != -1)
+            {
+                fileName = uninstallString.Substring(0, exeIndex + 4);
+                args = uninstallString.Substring(exeIndex + 4).Trim();
+            }
+            else
+            {
+                int spaceIndex = uninstallString.IndexOf(' ');
+                if (spaceIndex != -1)
+                {
+                    fileName = uninstallString.Substring(0, spaceIndex);
+                    args = uninstallString.Substring(spaceIndex + 1);
+                }
+            }
+        }
+
+        if (fileName.Contains("msiexec", StringComparison.OrdinalIgnoreCase))
+        {
+            fileName = "msiexec.exe";
+            args = uninstallString.Substring(uninstallString.IndexOf("msiexec", StringComparison.OrdinalIgnoreCase) + 7).Trim();
+        }
+
+        return (fileName.Trim(), args);
     }
 
     public static async Task RestoreMicrosoftStoreAsync(Action<string, LogLevel> logCallback)
