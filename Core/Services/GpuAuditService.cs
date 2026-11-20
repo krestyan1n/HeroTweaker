@@ -64,6 +64,10 @@ public static class GpuAuditService
     private static GpuAuditSnapshot Collect()
     {
         var adapters = ReadDisplayAdapters();
+        var nvidiaSnapshot = adapters.Any(adapter => adapter.Vendor == GpuVendor.Nvidia)
+            ? NvidiaManagementService.ReadAdapters()
+            : new NvidiaManagementService.NvidiaManagementSnapshot("NVIDIA не обнаружена", Array.Empty<NvidiaManagementService.NvidiaAdapterReading>());
+        adapters = EnrichNvidiaAdapters(adapters, nvidiaSnapshot.Adapters);
         var checks = new List<GpuAuditCheck>();
         var windowsChecks = new List<GpuAuditCheck>();
 
@@ -121,7 +125,69 @@ public static class GpuAuditService
                 GpuAuditSeverity.Good));
         }
 
-        return new GpuAuditSnapshot { Adapters = adapters, Checks = checks, WindowsChecks = windowsChecks };
+        if (hasNvidia)
+        {
+            var telemetryAvailable = adapters.Any(adapter => adapter.Vendor == GpuVendor.Nvidia && adapter.RuntimeTelemetry != null);
+            checks.Add(new GpuAuditCheck(
+                "NVIDIA NVML / телеметрия драйвера",
+                telemetryAvailable ? "Подключена" : "Недоступна",
+                telemetryAvailable
+                    ? "Считывание загрузки, температуры, мощности, частот и VRAM только для чтения. Поддержка отдельных значений зависит от модели и версии драйвера."
+                    : nvidiaSnapshot.Status,
+                telemetryAvailable ? GpuAuditSeverity.Good : GpuAuditSeverity.Info));
+        }
+
+        return new GpuAuditSnapshot
+        {
+            Adapters = adapters,
+            Checks = checks,
+            WindowsChecks = windowsChecks,
+            NvidiaApiStatus = nvidiaSnapshot.Status
+        };
+    }
+
+    private static List<GpuAdapterInfo> EnrichNvidiaAdapters(
+        IReadOnlyList<GpuAdapterInfo> adapters,
+        IReadOnlyList<NvidiaManagementService.NvidiaAdapterReading> nvidiaAdapters)
+    {
+        if (nvidiaAdapters.Count == 0) return adapters.ToList();
+
+        return adapters.Select(adapter =>
+        {
+            if (adapter.Vendor != GpuVendor.Nvidia) return adapter;
+            var normalizedName = string.Join(' ', adapter.Name.Split(' ', StringSplitOptions.RemoveEmptyEntries));
+            var match = nvidiaAdapters
+                .Select(candidate => (Candidate: candidate, Score: NvidiaNameSimilarity(normalizedName, candidate.Name)))
+                .OrderByDescending(candidate => candidate.Score)
+                .FirstOrDefault();
+            if (match.Candidate == null || match.Score == 0) return adapter;
+
+            var telemetry = match.Candidate.Telemetry;
+            return new GpuAdapterInfo
+            {
+                Name = adapter.Name,
+                Vendor = adapter.Vendor,
+                VendorName = adapter.VendorName,
+                DriverVersion = string.IsNullOrWhiteSpace(adapter.DriverVersion) || adapter.DriverVersion == "Не определена"
+                    ? string.IsNullOrWhiteSpace(telemetry.DriverVersion) ? adapter.DriverVersion : telemetry.DriverVersion
+                    : adapter.DriverVersion,
+                DriverDate = adapter.DriverDate,
+                PnpDeviceId = adapter.PnpDeviceId,
+                DedicatedMemoryBytes = adapter.DedicatedMemoryBytes > 0
+                    ? adapter.DedicatedMemoryBytes
+                    : telemetry.TotalMemoryBytes ?? 0,
+                IsDiscrete = adapter.IsDiscrete,
+                RuntimeTelemetry = telemetry
+            };
+        }).ToList();
+    }
+
+    private static int NvidiaNameSimilarity(string first, string second)
+    {
+        if (first.Equals(second, StringComparison.OrdinalIgnoreCase)) return 100;
+        if (first.Contains(second, StringComparison.OrdinalIgnoreCase) || second.Contains(first, StringComparison.OrdinalIgnoreCase)) return 50;
+        var tokens = first.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return tokens.Count(token => token.Length >= 3 && second.Contains(token, StringComparison.OrdinalIgnoreCase));
     }
 
     private static List<GpuAdapterInfo> ReadDisplayAdapters()

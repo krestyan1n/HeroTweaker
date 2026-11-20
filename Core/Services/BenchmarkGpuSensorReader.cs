@@ -7,11 +7,15 @@ internal sealed class BenchmarkGpuSensorReader : IDisposable
 {
     private readonly Computer _computer = new() { IsGpuEnabled = true };
     private readonly string _adapterName;
+    private readonly NvidiaManagementService.NvidiaManagementSession? _nvidiaSession;
     private bool _opened;
 
     public BenchmarkGpuSensorReader(string? adapterName)
     {
         _adapterName = adapterName ?? string.Empty;
+        if (_adapterName.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase) ||
+            _adapterName.Contains("GeForce", StringComparison.OrdinalIgnoreCase))
+            _nvidiaSession = NvidiaManagementService.NvidiaManagementSession.TryOpen(out _);
         try
         {
             _computer.Open();
@@ -21,6 +25,26 @@ internal sealed class BenchmarkGpuSensorReader : IDisposable
     }
 
     public GpuSensorReading Read()
+    {
+        var lhm = ReadLhmSensors();
+        var nvidia = _nvidiaSession?.ReadTelemetry(_adapterName);
+        if (nvidia == null ||
+            (nvidia.GpuUtilizationPercent == null && nvidia.TemperatureC == null && nvidia.PowerWatts == null &&
+             nvidia.GraphicsClockMhz == null && nvidia.MemoryClockMhz == null && nvidia.FanPercent == null))
+            return lhm;
+
+        return new GpuSensorReading(
+            lhm.TemperatureC ?? nvidia.TemperatureC,
+            lhm.HotspotTemperatureC,
+            lhm.MemoryTemperatureC,
+            lhm.PowerWatts ?? nvidia.PowerWatts,
+            lhm.ClockMhz ?? nvidia.GraphicsClockMhz,
+            lhm.FanPercent ?? nvidia.FanPercent,
+            lhm.LoadPercent ?? nvidia.GpuUtilizationPercent,
+            $"NVML: {nvidia.ApiStatus} {lhm.Status}");
+    }
+
+    private GpuSensorReading ReadLhmSensors()
     {
         if (!_opened)
             return GpuSensorReading.Unavailable("Сенсоры не открылись; проверьте драйвер и права доступа.");
@@ -121,6 +145,7 @@ internal sealed class BenchmarkGpuSensorReader : IDisposable
 
     public void Dispose()
     {
+        _nvidiaSession?.Dispose();
         if (!_opened) return;
         try { _computer.Close(); } catch { }
         _opened = false;

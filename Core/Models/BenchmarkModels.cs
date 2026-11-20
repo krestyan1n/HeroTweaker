@@ -11,9 +11,11 @@ public sealed class FrameTimeBenchmarkResult
     public double P99FrameTimeMs { get; init; }
     public DateTime CapturedAtLocal { get; init; } = DateTime.Now;
     public string? ExecutableName { get; init; }
+    public int? ProcessId { get; init; }
     public string? TelemetryFilePath { get; init; }
     public double? AverageGameCpuPercent { get; init; }
     public double? AverageGameWorkingSetMb { get; init; }
+    public double? AverageGamePrivateMemoryMb { get; init; }
     public double? AverageSystemCpuPercent { get; init; }
     public double? AverageSystemMemoryPercent { get; init; }
     public double? AverageSystemUsedMemoryGb { get; init; }
@@ -36,6 +38,10 @@ public sealed class FrameTimeBenchmarkResult
     public string AverageFrameTimeText => $"{AverageFrameTimeMs:F2} мс";
     public string P99FrameTimeText => $"{P99FrameTimeMs:F2} мс";
 }
+
+public sealed record BenchmarkRunningProcess(int ProcessId, string Name, string ExecutablePath, string WindowTitle, double WorkingSetMb);
+
+public sealed record BenchmarkCaptureRequest(string Kind, int ProcessId);
 
 public sealed class BenchmarkTelemetrySample
 {

@@ -19,6 +19,8 @@ public partial class WebShellWindow : Window
 {
     private const string VirtualHost = "herotweaker.local";
     private readonly MainViewModel _viewModel;
+    private IReadOnlyList<BenchmarkRunningProcess> _benchmarkProcesses = Array.Empty<BenchmarkRunningProcess>();
+    private int? _selectedBenchmarkProcessId;
     private bool _webViewInitialized;
     private bool _initializationStarted;
 
@@ -141,6 +143,10 @@ public partial class WebShellWindow : Window
                     if (IsKnownCategory(category))
                     {
                         _viewModel.SelectedCategory = category;
+                        if (category == "Бенчмарк")
+                            await RefreshBenchmarkProcessesAsync();
+                        else if (_viewModel.IsGpuAuditVisible)
+                            await _viewModel.RefreshGpuAuditAsync();
                         SendSnapshot();
                     }
                     break;
@@ -215,7 +221,16 @@ public partial class WebShellWindow : Window
                     RunNetworkAction(ReadString(root, "command"));
                     break;
                 case "benchmarkCapture":
-                    CaptureBenchmark(ReadString(root, "kind"));
+                    await CaptureBenchmarkAsync(ReadString(root, "kind"), (int)ReadDouble(root, "processId"));
+                    break;
+                case "benchmarkRefreshProcesses":
+                    await RefreshBenchmarkProcessesAsync();
+                    SendSnapshot();
+                    break;
+                case "benchmarkSelectProcess":
+                    var processId = (int)ReadDouble(root, "processId");
+                    _selectedBenchmarkProcessId = _benchmarkProcesses.Any(process => process.ProcessId == processId) ? processId : null;
+                    SendSnapshot();
                     break;
                 case "benchmarkDuration":
                     _viewModel.BenchmarkDurationSeconds = (int)Math.Clamp(ReadDouble(root, "value"), 15, 600);
@@ -367,7 +382,22 @@ public partial class WebShellWindow : Window
                     driverDate = item.DriverDate,
                     memory = item.DedicatedMemoryFormatted,
                     type = item.AdapterKind,
+                    telemetry = item.RuntimeTelemetry == null ? null : new
+                    {
+                        apiStatus = item.RuntimeTelemetry.ApiStatus,
+                        driverVersion = item.RuntimeTelemetry.DriverVersion,
+                        totalMemoryBytes = item.RuntimeTelemetry.TotalMemoryBytes,
+                        usedMemoryBytes = item.RuntimeTelemetry.UsedMemoryBytes,
+                        gpuUtilizationPercent = item.RuntimeTelemetry.GpuUtilizationPercent,
+                        memoryUtilizationPercent = item.RuntimeTelemetry.MemoryUtilizationPercent,
+                        temperatureC = item.RuntimeTelemetry.TemperatureC,
+                        powerWatts = item.RuntimeTelemetry.PowerWatts,
+                        graphicsClockMhz = item.RuntimeTelemetry.GraphicsClockMhz,
+                        memoryClockMhz = item.RuntimeTelemetry.MemoryClockMhz,
+                        fanPercent = item.RuntimeTelemetry.FanPercent,
+                    },
                 }).ToArray(),
+                apiStatus = _viewModel.GpuNvidiaApiStatus,
                 checks = _viewModel.GpuAuditChecks.Concat(_viewModel.GpuWindowsChecks).Select(item => new
                 {
                     title = item.Title,
@@ -585,6 +615,15 @@ public partial class WebShellWindow : Window
                 telemetryComparison = _viewModel.BenchmarkTelemetryComparisonText,
                 baseline = _viewModel.BenchmarkBaseline,
                 after = _viewModel.BenchmarkAfter,
+                processes = _benchmarkProcesses.Select(item => new
+                {
+                    processId = item.ProcessId,
+                    name = item.Name,
+                    executablePath = item.ExecutablePath,
+                    windowTitle = item.WindowTitle,
+                    workingSetMb = item.WorkingSetMb,
+                }).ToArray(),
+                selectedProcessId = _selectedBenchmarkProcessId,
             } : null,
             driveStatus = _viewModel.DriveInventoryStatus,
             status = _viewModel.StatusMessage,
@@ -692,6 +731,15 @@ public partial class WebShellWindow : Window
 
     private async Task RunGpuActionAsync(string command)
     {
+        if (command == "refreshAudit")
+        {
+            var auditTask = _viewModel.RefreshGpuAuditAsync();
+            SendSnapshot();
+            await auditTask;
+            SendSnapshot();
+            return;
+        }
+
         if (command == "refreshTuning")
         {
             var refreshTask = _viewModel.RefreshAmdGpuTuningAsync();
@@ -845,10 +893,22 @@ public partial class WebShellWindow : Window
         }
     }
 
-    private void CaptureBenchmark(string kind)
+    private async Task CaptureBenchmarkAsync(string kind, int processId)
     {
-        if ((kind is "baseline" or "after") && _viewModel.CaptureBenchmarkCommand.CanExecute(kind))
-            _viewModel.CaptureBenchmarkCommand.Execute(kind);
+        if (kind is not ("baseline" or "after") || processId <= 0 || _viewModel.IsBenchmarkCapturing) return;
+        var captureTask = _viewModel.CaptureBenchmarkAsync(new BenchmarkCaptureRequest(kind, processId));
+        SendSnapshot();
+        await captureTask;
+        SendSnapshot();
+    }
+
+    private async Task RefreshBenchmarkProcessesAsync()
+    {
+        var previousSelection = _selectedBenchmarkProcessId;
+        _benchmarkProcesses = await Task.Run(FrameTimeBenchmarkService.GetRunningProcesses);
+        _selectedBenchmarkProcessId = previousSelection.HasValue && _benchmarkProcesses.Any(process => process.ProcessId == previousSelection.Value)
+            ? previousSelection
+            : null;
     }
 
     private static void Execute(System.Windows.Input.ICommand command)

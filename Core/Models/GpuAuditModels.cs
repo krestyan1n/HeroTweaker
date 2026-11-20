@@ -23,6 +23,7 @@ public sealed class GpuAdapterInfo
     public string PnpDeviceId { get; init; } = string.Empty;
     public ulong DedicatedMemoryBytes { get; init; }
     public bool IsDiscrete { get; init; }
+    public NvidiaGpuTelemetry? RuntimeTelemetry { get; init; }
 
     public string DedicatedMemoryFormatted => DedicatedMemoryBytes == 0
         ? "VRAM не определена"
@@ -32,6 +33,22 @@ public sealed class GpuAdapterInfo
     public string HardwareIdShort => string.IsNullOrWhiteSpace(PnpDeviceId)
         ? "PCI ID недоступен"
         : PnpDeviceId.Replace("PCI\\", string.Empty, StringComparison.OrdinalIgnoreCase);
+}
+
+/// <summary>Read-only values returned by the installed NVIDIA driver through NVML.</summary>
+public sealed class NvidiaGpuTelemetry
+{
+    public string ApiStatus { get; init; } = "NVML не подключена";
+    public string DriverVersion { get; init; } = string.Empty;
+    public ulong? TotalMemoryBytes { get; init; }
+    public ulong? UsedMemoryBytes { get; init; }
+    public uint? GpuUtilizationPercent { get; init; }
+    public uint? MemoryUtilizationPercent { get; init; }
+    public uint? TemperatureC { get; init; }
+    public double? PowerWatts { get; init; }
+    public uint? GraphicsClockMhz { get; init; }
+    public uint? MemoryClockMhz { get; init; }
+    public uint? FanPercent { get; init; }
 }
 
 public sealed record GpuAuditCheck(string Title, string Value, string Details, GpuAuditSeverity Severity);
@@ -55,6 +72,7 @@ public sealed class GpuAuditSnapshot
     public IReadOnlyList<GpuAdapterInfo> Adapters { get; init; } = Array.Empty<GpuAdapterInfo>();
     public IReadOnlyList<GpuAuditCheck> Checks { get; init; } = Array.Empty<GpuAuditCheck>();
     public IReadOnlyList<GpuAuditCheck> WindowsChecks { get; init; } = Array.Empty<GpuAuditCheck>();
+    public string NvidiaApiStatus { get; init; } = "NVIDIA не обнаружена";
     public bool HasAmd => Adapters.Any(adapter => adapter.Vendor == GpuVendor.Amd);
     public bool HasNvidia => Adapters.Any(adapter => adapter.Vendor == GpuVendor.Nvidia);
 }

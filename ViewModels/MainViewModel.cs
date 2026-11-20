@@ -213,7 +213,7 @@ public class MainViewModel : ObservableObject
         "Сеть & Пинг" => "Выбор адаптера, сетевой реаниматор, DNS бенчмарк и сверхнизкая задержка Nagle",
         "AMD GPU" => "Аудит AMD-адаптера: конфигурация Windows, память видеокарты и готовность к диагностике производительности",
         "NVIDIA GPU" => "Аудит NVIDIA-адаптера: конфигурация Windows, память видеокарты и готовность к диагностике производительности",
-        "Бенчмарк" => "Сравнение замеров до и после по CSV PresentMon — только измеренные данные, без выдуманных баллов",
+        "Бенчмарк" => "Захват выбранной запущенной игры: PresentMon, нагрузка CPU/RAM/GPU и доступные датчики",
         "Настройки" => "Выбор цветовой палитры интерфейса, управление снимками реестра и кэшем",
         _ => "Управление и глубокая оптимизация параметров операционной системы"
     };
@@ -349,6 +349,9 @@ public class MainViewModel : ObservableObject
 
     private string _gpuAuditStatus = "Ожидание аппаратного аудита";
     public string GpuAuditStatus { get => _gpuAuditStatus; private set => SetField(ref _gpuAuditStatus, value); }
+
+    private string _gpuNvidiaApiStatus = "Ожидание проверки NVIDIA NVML";
+    public string GpuNvidiaApiStatus { get => _gpuNvidiaApiStatus; private set => SetField(ref _gpuNvidiaApiStatus, value); }
 
     private bool _isAmdGpuTuningAvailable;
     public bool IsAmdGpuTuningAvailable { get => _isAmdGpuTuningAvailable; private set => SetField(ref _isAmdGpuTuningAvailable, value); }
@@ -1856,7 +1859,7 @@ public class MainViewModel : ObservableObject
 
     private Task? _gpuAuditRefreshTask;
 
-    private Task RefreshGpuAuditAsync()
+    public Task RefreshGpuAuditAsync()
     {
         if (_gpuAuditRefreshTask is { IsCompleted: false })
             return _gpuAuditRefreshTask;
@@ -1880,6 +1883,7 @@ public class MainViewModel : ObservableObject
 
             GpuWindowsChecks.Clear();
             foreach (var check in snapshot.WindowsChecks) GpuWindowsChecks.Add(check);
+            GpuNvidiaApiStatus = snapshot.NvidiaApiStatus;
 
             RefreshGpuGameProfiles();
 
@@ -2131,27 +2135,36 @@ public class MainViewModel : ObservableObject
         }
     }
 
+    public Task CaptureBenchmarkAsync(BenchmarkCaptureRequest request) => ExecuteCaptureBenchmarkAsync(request);
+
     private async Task ExecuteCaptureBenchmarkAsync(object? parameter)
     {
-        var isBaseline = string.Equals(parameter?.ToString(), "baseline", StringComparison.OrdinalIgnoreCase);
-        var gameDialog = new OpenFileDialog
+        if (parameter is not BenchmarkCaptureRequest request || request.ProcessId <= 0)
         {
-            Title = "Выберите исполняемый файл игры для PresentMon",
-            Filter = "Исполняемые файлы (*.exe)|*.exe",
-            CheckFileExists = true
-        };
-        if (gameDialog.ShowDialog() != true) return;
+            BenchmarkStatus = "Выберите запущенное приложение из списка и повторите замер.";
+            return;
+        }
+
+        var isBaseline = string.Equals(request.Kind, "baseline", StringComparison.OrdinalIgnoreCase);
+        var process = FrameTimeBenchmarkService.GetRunningProcesses()
+            .FirstOrDefault(candidate => candidate.ProcessId == request.ProcessId);
+        if (process == null)
+        {
+            BenchmarkStatus = "Выбранное приложение больше не запущено. Обновите список процессов.";
+            return;
+        }
 
         var outputFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "HeroTweaker", "Benchmarks");
         Directory.CreateDirectory(outputFolder);
         var suffix = isBaseline ? "before" : "after";
-        var outputPath = Path.Combine(outputFolder, $"{Path.GetFileNameWithoutExtension(gameDialog.FileName)}-{suffix}-{DateTime.Now:yyyyMMdd-HHmmss}.csv");
+        var safeName = string.Concat(process.Name.Select(character => Path.GetInvalidFileNameChars().Contains(character) ? '_' : character));
+        var outputPath = Path.Combine(outputFolder, $"{safeName}-{suffix}-{DateTime.Now:yyyyMMdd-HHmmss}.csv");
 
         IsBenchmarkCapturing = true;
-        BenchmarkStatus = $"Захват {Path.GetFileName(gameDialog.FileName)} · {BenchmarkDurationSeconds} сек. Запустите игру и повторите одну и ту же сцену.";
+        BenchmarkStatus = $"Подготовка {process.Name} · PID {process.ProcessId}. Переключитесь в игру: через 5 секунд начнётся запись на {BenchmarkDurationSeconds} секунд.";
         try
         {
-            var result = await FrameTimeBenchmarkService.CaptureAsync(gameDialog.FileName, outputPath, BenchmarkDurationSeconds, ActiveGpuAdapter?.Name);
+            var result = await FrameTimeBenchmarkService.CaptureAsync(process.ProcessId, outputPath, BenchmarkDurationSeconds, ActiveGpuAdapter?.Name);
             if (isBaseline) BenchmarkBaseline = result;
             else BenchmarkAfter = result;
             OnPropertyChanged(nameof(HasBenchmarkBaseline));
@@ -2160,7 +2173,7 @@ public class MainViewModel : ObservableObject
             OnPropertyChanged(nameof(BenchmarkAverageFpsDelta));
             OnPropertyChanged(nameof(BenchmarkTelemetryComparisonText));
             SaveBenchmarkResults();
-            BenchmarkStatus = $"Готово: {result.SampleCount:N0} кадров. CSV: {outputPath}";
+            BenchmarkStatus = $"Готово: {result.SampleCount:N0} кадров и {result.TelemetrySampleCount:N0} срезов телеметрии. CSV и JSON сохранены локально.";
         }
         catch (Exception ex)
         {

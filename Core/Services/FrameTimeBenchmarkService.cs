@@ -67,21 +67,70 @@ public static class FrameTimeBenchmarkService
         }
     }
 
-    public static async Task<FrameTimeBenchmarkResult> CaptureAsync(string executablePath, string outputPath, int seconds, string? gpuAdapterName = null)
+    public static IReadOnlyList<BenchmarkRunningProcess> GetRunningProcesses()
+    {
+        var processes = new List<BenchmarkRunningProcess>();
+        foreach (var process in Process.GetProcesses())
+        {
+            try
+            {
+                if (process.Id <= 4 || process.Id == Environment.ProcessId || process.HasExited) continue;
+                if (process.MainWindowHandle == IntPtr.Zero) continue;
+                var title = process.MainWindowTitle?.Trim() ?? string.Empty;
+                if (title.Length == 0) title = "Окно без заголовка";
+                var executablePath = process.MainModule?.FileName;
+                if (string.IsNullOrWhiteSpace(executablePath) || !File.Exists(executablePath)) continue;
+                processes.Add(new BenchmarkRunningProcess(
+                    process.Id,
+                    Path.GetFileNameWithoutExtension(executablePath),
+                    executablePath,
+                    title,
+                    process.WorkingSet64 / 1024d / 1024d));
+            }
+            catch
+            {
+                // Защищённые и завершившиеся процессы пропускаются; пользовательские игры остаются в списке.
+            }
+            finally
+            {
+                process.Dispose();
+            }
+        }
+
+        return processes
+            .OrderByDescending(process => process.WorkingSetMb)
+            .ThenBy(process => process.Name, StringComparer.OrdinalIgnoreCase)
+            .Take(80)
+            .ToArray();
+    }
+
+    public static async Task<FrameTimeBenchmarkResult> CaptureAsync(int processId, string outputPath, int seconds, string? gpuAdapterName = null)
     {
         var presentMon = FindPresentMon() ?? throw new FileNotFoundException("PresentMon не найден. Установите PresentMon или используйте CSV импорт.");
-        var processName = Path.GetFileNameWithoutExtension(executablePath);
-        if (string.IsNullOrWhiteSpace(processName)) throw new ArgumentException("Не удалось определить имя процесса игры.", nameof(executablePath));
+        if (processId <= 0) throw new ArgumentOutOfRangeException(nameof(processId), "Выберите работающую игру или приложение.");
+        string processName;
+        try
+        {
+            using var selected = Process.GetProcessById(processId);
+            if (selected.HasExited) throw new InvalidOperationException("Выбранное приложение уже завершилось. Обновите список процессов.");
+            processName = selected.ProcessName;
+        }
+        catch (ArgumentException)
+        {
+            throw new InvalidOperationException("Выбранное приложение уже завершилось. Обновите список процессов.");
+        }
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPath))!);
         if (File.Exists(outputPath)) File.Delete(outputPath);
         using var capture = new Process
         {
             StartInfo = new ProcessStartInfo { FileName = presentMon, UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true }
         };
-        capture.StartInfo.ArgumentList.Add("--process_name");
-        capture.StartInfo.ArgumentList.Add(processName);
+        capture.StartInfo.ArgumentList.Add("--process_id");
+        capture.StartInfo.ArgumentList.Add(processId.ToString(CultureInfo.InvariantCulture));
         capture.StartInfo.ArgumentList.Add("--output_file");
         capture.StartInfo.ArgumentList.Add(outputPath);
+        capture.StartInfo.ArgumentList.Add("--delay");
+        capture.StartInfo.ArgumentList.Add("5");
         capture.StartInfo.ArgumentList.Add("--timed");
         capture.StartInfo.ArgumentList.Add(Math.Clamp(seconds, 15, 600).ToString(CultureInfo.InvariantCulture));
         capture.StartInfo.ArgumentList.Add("--terminate_after_timed");
@@ -91,8 +140,13 @@ public static class FrameTimeBenchmarkService
         var errorTask = capture.StandardError.ReadToEndAsync();
         using var telemetryCancellation = new CancellationTokenSource();
         var telemetryPath = Path.ChangeExtension(outputPath, ".telemetry.json");
-        var telemetryTask = CollectTelemetryAsync(processName, gpuAdapterName, telemetryPath, telemetryCancellation.Token);
-        await capture.WaitForExitAsync();
+        var captureExit = capture.WaitForExitAsync();
+        var telemetryWarmup = Task.Delay(TimeSpan.FromSeconds(5));
+        var warmupResult = await Task.WhenAny(captureExit, telemetryWarmup);
+        var telemetryTask = warmupResult == telemetryWarmup
+            ? CollectTelemetryAsync(processId, gpuAdapterName, telemetryPath, telemetryCancellation.Token)
+            : Task.FromResult(new List<BenchmarkTelemetrySample>());
+        await captureExit;
         if (capture.ExitCode != 0)
         {
             telemetryCancellation.Cancel();
@@ -122,9 +176,11 @@ public static class FrameTimeBenchmarkService
             AverageFrameTimeMs = imported.AverageFrameTimeMs,
             P99FrameTimeMs = imported.P99FrameTimeMs,
             ExecutableName = processName,
+            ProcessId = processId,
             TelemetryFilePath = telemetryPath,
             AverageGameCpuPercent = Average(telemetry.Select(sample => sample.GameCpuPercent)),
             AverageGameWorkingSetMb = Average(telemetry.Select(sample => sample.GameWorkingSetMb)),
+            AverageGamePrivateMemoryMb = Average(telemetry.Select(sample => sample.GamePrivateMemoryMb)),
             AverageSystemCpuPercent = Average(telemetry.Select(sample => sample.SystemCpuPercent)),
             AverageSystemMemoryPercent = Average(telemetry.Select(sample => sample.SystemMemoryPercent)),
             AverageSystemUsedMemoryGb = Average(telemetry.Select(sample => sample.SystemUsedMemoryGb)),
@@ -145,7 +201,7 @@ public static class FrameTimeBenchmarkService
         return enriched;
     }
 
-    private static async Task<List<BenchmarkTelemetrySample>> CollectTelemetryAsync(string processName, string? gpuAdapterName, string outputPath, CancellationToken cancellationToken)
+    private static async Task<List<BenchmarkTelemetrySample>> CollectTelemetryAsync(int processId, string? gpuAdapterName, string outputPath, CancellationToken cancellationToken)
     {
         var samples = new List<BenchmarkTelemetrySample>();
         var previousProcessTimes = new Dictionary<int, (TimeSpan Cpu, long Tick)>();
@@ -179,11 +235,8 @@ public static class FrameTimeBenchmarkService
             double? gameCpu = null, workingSet = null, privateMemory = null;
             try
             {
-                var candidate = Process.GetProcessesByName(processName)
-                    .Where(process => !process.HasExited)
-                    .OrderByDescending(process => process.WorkingSet64)
-                    .FirstOrDefault();
-                if (candidate != null)
+                var candidate = Process.GetProcessById(processId);
+                if (!candidate.HasExited)
                 {
                     using (candidate)
                     {
